@@ -1,0 +1,10 @@
+# すべてのJSONファイルを無視（秘密鍵の漏洩を物理的に防ぐ）
+*.json
+
+# Pythonのキャッシュ
+__pycache__/
+*.pyc
+
+# OSのゴミ
+Thumbs.db
+.DS_Store
