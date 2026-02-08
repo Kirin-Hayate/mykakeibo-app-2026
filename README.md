@@ -1,27 +1,27 @@
-My�ƌv��A�v�� (Flet + Google Sheets)
+My家計簿アプリ (Flet + Google Sheets)
 
-�c�䃏�O�l���◝�H�w���̊w���������x���邽�߂ɊJ�����Ă���A����̉ƌv��A�v���P�[�V�����ł��B
-�t�����g�G���h�� Flet (Python)�A�o�b�N�G���h�� Google Sheets API ���̗p���Ă��܂��B
+自作の家計簿アプリケーションです。
+フロントエンドに Flet (Python)、バックエンドに Google Sheets API を採用しています。
 
-��ȋ@�\
+主な機能
 
-Expense/Income �L�^: �J�e�S���I���Ƌ��z���͂ɂ�钼���I�ȋL�^
+Expense/Income 記録: カテゴリ選択と金額入力による直感的な記録
 
-Analysis ���[�h: �f�[�^�̍i�荞�݁A�\�[�g�@�\
+Analysis モード: データの絞り込み、ソート機能
 
-�������|�[�g: �~�O���t�ɂ��x�o�E�����̓���\�� (Flet PieChart)
+可視化レポート: 円グラフによる支出・収入の内訳表示 (Flet PieChart)※ここの機能は追加修正中
 
-�N���E�h�A�g: Google�X�v���b�h�V�[�g�ւ̃��A���^�C���������݁E�ǂݍ���
+クラウド連携: Googleスプレッドシートへのリアルタイム書き込み・読み込み
 
-�Z�b�g�A�b�v
+セットアップ
 
-���̃v���W�F�N�g�����s����ɂ́A�ȉ��̃��C�u�������K�v�ł��B
+このプロジェクトを実行するには、以下のライブラリが必要です。
 
 pip install -r requirements.txt
 
 
-���ӎ���
+注意事項
 
-�Z�L�����e�B�̂��߁AGoogle Cloud �̔閧���iJSON�j�̓��|�W�g���Ɋ܂܂�Ă��܂���B
+セキュリティのため、Google Cloud の秘密鍵（JSON）はリポジトリに含まれていません。
 
-���s�ɂ͊e���̔閧���t�@�C�����K�v�ł��B
+実行には各自の秘密鍵ファイルが必要です。
