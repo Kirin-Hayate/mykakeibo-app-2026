@@ -1,3 +1,6 @@
+#Filtering関数の導入まではできていて、動作も正常。
+#filteringの条件をアプリ側から操作することができないのが課題
+
 import flet as ft
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -67,9 +70,6 @@ def Yomikomi():
 
 #ページを駆動する部分
 async def main(page: ft.Page):
-    # 現在実行中のメインタスクを保持する変数
-    current_task = None
-
     page.title = "test"
     page.window_width = 400
     page.window_height = 700
@@ -80,6 +80,7 @@ async def main(page: ft.Page):
 
     #カテゴリ選択を横スクロールにするための準備(初期値、動作設定)
     selected_category = None
+
     options_expense_list = ["Wagner", "SYC", "交通", "食費", "交際", "勉強,研究", "電話", "娯楽", "美容", "税", "衣服", "旅行", "給与誤差脱漏", "医療", "その他"]
     options_income_list = ["FreeStep", "お小遣い", "その他"]
 
@@ -99,7 +100,6 @@ async def main(page: ft.Page):
 
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
     async def make_recordingpage():
-        nonlocal status_label
         page.add(
             ft.Row(
                 [date_label, dateselect_button],
@@ -120,108 +120,9 @@ async def main(page: ft.Page):
 
     #Analysisモードの画面を作製する関数　make_analysispage()
     async def make_analysispage():
-        
-        # --- 検索条件をページに記憶させる（リセット防止） ---
-        if not hasattr(page, "filter_query"):
-            page.filter_query = [None, None, None, None, None, None, None]
-
-# --- 詳細レポート（円グラフ）を表示する関数（最新版 0.25.0対応） ---
-        async def open_detailed_report(e):
-            expense_summary = {}
-            income_summary = {}
-            
-            # データの集計
-            for row in filtered_data_rows:
-                mode = row[1]
-                amt = abs(float(row[2])) if row[2] != "" else 0
-                cat = row[3]
-                if mode == "Expense":
-                    expense_summary[cat] = expense_summary.get(cat, 0) + amt
-                else:
-                    income_summary[cat] = income_summary.get(cat, 0) + amt
-
-            def create_sections(summary_dict):
-                # 最新版のカラーパレット指定（大文字Colors）
-                palette = [ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN, 
-                           ft.Colors.AMBER, ft.Colors.PURPLE, ft.Colors.CYAN, ft.Colors.ORANGE]
-                sections = []
-                for i, (cat, val) in enumerate(summary_dict.items()):
-                    sections.append(
-                        ft.PieChartSection( # charts. 不要！ft.直下で呼べます
-                            value=val,
-                            title=f"{cat}\n¥{val:,.0f}",
-                            color=palette[i % len(palette)],
-                            radius=50,
-                            title_style=ft.TextStyle(size=10, weight="bold", color="white"),
-                        )
-                    )
-                return sections
-
-            # 最新版のPieChart構築
-            expense_chart = ft.PieChart(
-                sections=create_sections(expense_summary),
-                sections_space=2,
-                center_space_radius=30,
-                expand=True
-            ) if expense_summary else ft.Text("支出データなし")
-
-            income_chart = ft.PieChart(
-                sections=create_sections(income_summary),
-                sections_space=2,
-                center_space_radius=30,
-                expand=True
-            ) if income_summary else ft.Text("収入データなし")
-
-            def close_report(e):
-                report_dialog.open = False
-                page.update()
-
-
-            # ダイアログの表示
-            report_dialog = ft.AlertDialog(
-                title=ft.Text("収支内訳レポート"),
-                content=ft.Column([
-                    ft.Text("支出の内訳", color="orange", weight="bold"),
-                    ft.Container(expense_chart, height=200, padding=10),
-                    ft.Divider(),
-                    ft.Text("収入の内訳", color="green", weight="bold"),
-                    ft.Container(income_chart, height=200, padding=10),
-                ], scroll=ft.ScrollMode.ADAPTIVE, tight=True),
-                actions=[
-                    ft.TextButton("閉じる", on_click=close_report)
-                ]
-            )
-            page.overlay.append(report_dialog)
-            report_dialog.open = True
-            page.update()
-
-        #検索窓呼び出しアイコン,詳細レポート呼び出しアイコンを描画
-        page.add(
-            ft.Row(
-                controls=[
-                    ft.IconButton(
-                        icon=ft.Icons.MANAGE_SEARCH, 
-                        icon_size=25, # 文字のサイズに合わせると綺麗です
-                        on_click=lambda _: page.run_task(open_filter_dialog),
-                        tooltip="絞り込み条件を開く" # ホバーした時に説明が出ます
-                    ),
-                    ft.Text("←filtering", size=10, weight="bold"),
-
-                    ft.IconButton(
-                        icon=ft.Icons.TIMELINE, 
-                        icon_size=25, # 文字のサイズに合わせると綺麗です
-                        on_click= open_detailed_report,
-                        tooltip="詳細な分析を開く" # ホバーした時に説明が出ます
-                    ),
-                    ft.Text("←detailed report", size=10, weight="bold"),
-
-                ],
-                alignment=ft.MainAxisAlignment.START, # 左寄せにする（これで隣接します）
-                vertical_alignment=ft.CrossAxisAlignment.CENTER, # 上下の中央を揃える
-                spacing=5 # 文字とアイコンの間の距離（お好みで調整してください）
-            )
-        )
-
+    
+    # --- 記録一覧の表示 ---
+        page.add(ft.Text("記録一覧", size=25, weight="bold"))
         #Analysisモードにおける修正用ダイアログを表示する関数
         async def open_edit_dialog(row_data):
             # --- 1. 選択状態を管理する変数 ---
@@ -295,11 +196,7 @@ async def main(page: ft.Page):
             
             # 「保存」を押したときの処理
             async def on_save(e):
-                dialog.open = False
-                page.update() 
-
-                status_right.value = "保存中..."
-                status_right.color = "orange"
+                status_label.value = "保存中..."
                 page.update()
                 # 新しい金額を計算
                 new_kingaku = float(edit_amount.value) * (-1 if row_data[1] == "Expense" else 1)
@@ -312,24 +209,14 @@ async def main(page: ft.Page):
 
             # 「削除」を押したときの処理
             async def on_delete(e):
-                dialog.open = False
-                page.update() 
-
-                status_left.value = "削除中..."
-                status_left.color = "orange"
+                status_label.value = "削除中..."
                 page.update()
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], mode="DELETE")
                 dialog.open = False
                 await refresh_view()
 
-            def close_edit_dialog(e):
-                dialog.open = False
-                page.update()
-
-
             #編集/削除画面の表示要素を規定
-            status_left = ft.Text("", weight="bold", size=12)
-            status_right = ft.Text("", weight="bold", size=12)
+            status_label = ft.Text("", color="orange", weight="bold")
 
             dialog = ft.AlertDialog(
                 title=ft.Text("Edit/Delete"),
@@ -340,25 +227,23 @@ async def main(page: ft.Page):
                     category_row,
                     edit_amount, 
                     edit_content,
+                    status_label
                     ], 
                     tight=True),
                 actions=[
                     ft.Row(
-                        controls=[
-                            # 左グループ：削除ボタンと、その横のラベル
-                            ft.Row([
-                                ft.TextButton("削除", on_click=on_delete, icon_color="red"),
-                                status_left
-                            ], spacing=5),
+                        [
+                            # 左端：削除ボタン
+                            ft.TextButton("削除", on_click=on_delete, icon_color="red"),
                             
-                            # 右グループ：保存ラベルと、保存ボタン
+                            # 中央〜右：キャンセルと保存をまとめる
                             ft.Row([
-                                status_right,
-                                ft.TextButton("キャンセル", on_click=close_edit_dialog),
+                                ft.TextButton("キャンセル", on_click=lambda _: setattr(dialog, "open", False)),
                                 ft.TextButton("保存", on_click=on_save),
-                            ], spacing=10)
+                            ], alignment=ft.MainAxisAlignment.END)
                         ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN # 両端に振り分ける
+                        # 削除ボタンと（キャンセル・保存セット）を両端に振り分ける
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN 
                     )
                 ],
             )
@@ -366,126 +251,9 @@ async def main(page: ft.Page):
             dialog.open = True
             page.update()    
 
-        #Analysisモードにおける絞り込み条件の入力ダイアログを表示する関数
-        async def open_filter_dialog():
-
-            # --- 1. 入力部品の定義 ---
-            # プルダウン：モード (空欄許可)
-            mode_dd = ft.Dropdown(
-                label="",
-                options=[ft.dropdown.Option(key="", text="指定なし"),ft.dropdown.Option("Expense"), ft.dropdown.Option("Income")],
-                width=110,
-                text_size=12,
-                value=page.filter_query[0]
-            )
-            # プルダウン：カテゴリ (空欄許可)
-            all_cat_options = sorted(list(set(options_expense_list + options_income_list)))
-            cat_dd = ft.Dropdown(
-                label="",
-                options=[ft.dropdown.Option(key="", text="指定なし"),]+[ft.dropdown.Option(c) for c in all_cat_options],
-                expand=True,
-                text_size=12,
-                value=page.filter_query[1]
-            )
-            # 直接入力：キーワード
-            keyword_tf = ft.TextField(label="keyword", expand=True, text_size=12,value=page.filter_query[2])
-
-            # 直接入力：日付範囲
-            oldest_date_tf = ft.TextField(label="date (from)", hint_text="YYYY-MM-DD", width=110, text_size=12,value=page.filter_query[3])
-            latest_date_tf = ft.TextField(label="date (to)", hint_text="YYYY-MM-DD", width=110, text_size=12,value=page.filter_query[4])
-
-            # 直接入力：金額範囲
-            max_val_str = str(page.filter_query[5]) if page.filter_query[5] is not None else ""
-            min_val_str = str(page.filter_query[6]) if page.filter_query[6] is not None else ""
-            
-            max_amt_tf = ft.TextField(label="amount (max)", width=110, text_size=12, value=max_val_str)
-            min_amt_tf = ft.TextField(label="amount (min)", width=110, text_size=12, value=min_val_str)
-
-            # --- 2. 決定ボタンが押された時の処理 ---
-            async def on_apply(e):
-                # 入力が「空文字」または「None」なら None を代入するようにガードをかける
-                page.filter_query[0] = mode_dd.value if mode_dd.value else None
-                page.filter_query[1] = cat_dd.value if cat_dd.value else None
-                # 入力があればその値を、なければ None を代入する
-                page.filter_query[0] = mode_dd.value if mode_dd.value else None
-                page.filter_query[1] = cat_dd.value if cat_dd.value else None
-                page.filter_query[2] = keyword_tf.value if keyword_tf.value else None
-                page.filter_query[3] = oldest_date_tf.value if oldest_date_tf.value else None
-                page.filter_query[4] = latest_date_tf.value if latest_date_tf.value else None
-                page.filter_query[5] = float(max_amt_tf.value) if max_amt_tf.value.strip() else None
-                page.filter_query[6] = float(min_amt_tf.value) if min_amt_tf.value.strip() else None
-                
-                dialog.open = False
-                await refresh_view() # 画面を再描画してフィルターを適用
-
-            def close_filter_dialog(e):
-                dialog.open = False
-                page.update()
-                
-            # --- 3. ダイアログのレイアウト構築 ---
-            dialog = ft.AlertDialog(
-                title=ft.Text("絞り込み条件", size=16, weight="bold"),
-                content=ft.Column([
-                    # 1行目: モード と カテゴリ（選択系）
-                    
-                    ft.Text("mode:"), mode_dd, 
-                    ft.Text("category:"), cat_dd,
-
-
-                    # 2行目: キーワード（単一入力系）
-                    ft.Row([
-                        ft.Text("keyword:"), keyword_tf
-                    ], spacing=10),
-
-                    # 3行目: 日付範囲（期間指定）
-                    ft.Row([
-                        ft.Text("date  :", size=12), oldest_date_tf, 
-                        ft.Text("～"), latest_date_tf
-                    ], spacing=5),
-
-                    # 4行目: 金額範囲（数値範囲指定）
-                    ft.Row([
-                        ft.Text("amount:", size=12), min_amt_tf, 
-                        ft.Text("～"), max_amt_tf
-                    ], spacing=5),
-                    
-                ], tight=True, spacing=20), # 各行の間隔を少し広げて見やすくしました
-                actions=[
-                    ft.TextButton("キャンセル", on_click=close_filter_dialog),
-                    ft.Button("絞り込み", icon=ft.Icons.FILTER_ALT, on_click=on_apply),
-                ],
-            )
-
-            page.overlay.append(dialog)
-            dialog.open = True
-            page.update()
-
-        loading_text = ft.Text("読み込み,絞り込み中...", color="orange")
-
         #記録一覧の表示のメインルート(エラーがなければここを通る)
         try:
-        # --- 適用されているフィルターを明示（条件がある時だけ白く光らせる） ---
-            def get_filter_style(value):
-                # 値がNoneまたは空文字なら灰色、それ以外（有効な条件）なら白を返す
-                return ft.TextStyle(color="white", weight="bold") if value else ft.TextStyle(color="grey600")
-
-            q = page.filter_query
-            filtering_message = ft.Text(
-                spans=[
-                    ft.TextSpan(f"[mode]:{q[0] or 'All'} ", style=get_filter_style(q[0])),
-                    ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
-                    ft.TextSpan(f"[category]:{q[1] or 'All'} ", style=get_filter_style(q[1])),
-                    ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
-                    ft.TextSpan(f"[keyword]:{q[2] or 'None'} ", style=get_filter_style(q[2])),
-                    ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
-                    ft.TextSpan(f"[date]:{q[3] or 'min'}~{q[4] or 'max'} ", style=get_filter_style(q[3] or q[4])),
-                    ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
-                    ft.TextSpan(f"[amount]:{q[6] or 'min'}~{q[5] or 'max'}", style=get_filter_style(q[6] or q[5])),
-                ]
-            )
-            page.add(filtering_message)
-
-            #読み込み中メッセージ
+            loading_text = ft.Text("スプレッドシートを読み込み中...", color="orange")
             page.add(loading_text)
             page.update() # ここで一度、画面に「読み込み中」を出す
 
@@ -504,11 +272,21 @@ async def main(page: ft.Page):
                 #latest_dateで絞る
                 filtered_record = [row for row in filtered_record if filter_query[4] is None or filter_query[4] >= row[0]]
                 #max_amountで絞る
-                filtered_record = [row for row in filtered_record if filter_query[5] is None or (row[2] != "" and float(row[2]) <= float(filter_query[5]))]
+                filtered_record = [row for row in filtered_record if filter_query[5] is None or filter_query[5] >= row[2]]
                 #min_amount で絞る
-                filtered_record = [row for row in filtered_record if filter_query[6] is None or (row[2] != "" and float(row[2]) >= float(filter_query[6]))]
+                filtered_record = [row for row in filtered_record if filter_query[6] is None or filter_query[6] <= row[2]]
 
                 return filtered_record
+
+            #データ絞り込み条件の初期値
+            mode, category, keyword, oldest_date, latest_date, max_amount, min_amount = None,None,None,None,None,None,None
+            filter_query = [mode, category, keyword, oldest_date, latest_date, max_amount, min_amount]
+
+            filtering_message = ft.Text(
+                f"[mode]:{mode} ,[category]:{category} ,[keyword]:{keyword} ,[date]:{oldest_date}~{latest_date},[amount]:{min_amount}~{max_amount}",
+                color="white"
+            )
+            page.add(filtering_message)
 
             # スプシからデータを取得
             raw_data = await asyncio.to_thread(Yomikomi)
@@ -518,104 +296,45 @@ async def main(page: ft.Page):
             data_rows = raw_data[1:]
 
             #データ部分は、filtering関数によって絞り込んで、filtered_data_rowsにする
-            filtered_data_rows = await filtering(data_rows, page.filter_query)
-
-            # --- 1. 収支の集計ロジック ---
-            # row[2]は金額。
-            # 支出合計の集計
-            total_expense = sum(
-                float(row[2]) if row[2] != "" else 0.0 
-                for row in filtered_data_rows if (row[2] != "" and float(row[2]) < 0)
-            )
-
-            # 収入合計の集計
-            total_income = sum(
-                float(row[2]) if row[2] != "" else 0.0 
-                for row in filtered_data_rows if (row[2] != "" and float(row[2]) > 0)
-            )
-            balance = total_income + total_expense # 収支
-
-            # --- 2. 表示用コンポーネントの作成 ---
-            summary_card = ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Icon(ft.Icons.PAYMENTS, color="orange"),
-                        ft.Text(f"支出合計: ¥{total_expense:,.0f}", color="orange", weight="bold"),
-                    ]),
-                    ft.Row([
-                        ft.Icon(ft.Icons.SAVINGS, color="green"),
-                        ft.Text(f"収入合計: ¥{total_income:,.0f}", color="green", weight="bold"),
-                    ]),
-                    ft.Divider(height=1, color="grey700"),
-                    ft.Row([
-                        ft.Text("収支:", size=16),
-                        ft.Text(
-                            f"¥{balance:,.0f}", 
-                            size=20, 
-                            weight="bold",
-                            color="green" if balance >= 0 else "orange" # プラスなら緑、マイナスならオレンジ
-                        ),
-                    ]),
-                ], spacing=5),
-                padding=5,
-                bgcolor=ft.Colors.GREY_900,
-                border_radius=10,
-                border=ft.border.all(1, "grey800"),
-            )
-
-            # 画面に追加
-            page.add(summary_card)
+            filtered_data_rows = await filtering(data_rows, filter_query)
 
             # --- 【重要】ソートの実行 ---
+            # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
+            filtered_data_rows.sort(
+                key=lambda x: x[sort_column_index] if sort_column_index != 2 else float(x[2]),
+                reverse=not sort_ascending
+            )
+            # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
+            data_table = ft.DataTable(
+                #高さ,幅
+                data_row_min_height=20,    # 行の最小高さ
+                data_row_max_height=40,    # 行の最大高さ
+                heading_row_height=20,     # 見出し（ヘッダー）行の高さ
+                column_spacing=10,         # 列同士の横の隙間
 
-            if not filtered_data_rows:
-                # 1. 該当データがない場合
-                page.add(ft.Text("該当するデータが見つかりませんでした", size=16, color="red"))
-                status_label = ft.Text("", color="green", weight="bold")
-                page.update()
-                
-            else:
-                #該当データがあるときだけsortを実行する
-
-                # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
-                filtered_data_rows.sort(
-                    key=lambda x: x[sort_column_index] if sort_column_index != 2 else float(x[2]),
-                    reverse=not sort_ascending
-                )
-                # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
-                data_table = ft.DataTable(
-                    #高さ,幅
-                    data_row_min_height=20,    # 行の最小高さ
-                    data_row_max_height=40,    # 行の最大高さ
-                    heading_row_height=20,     # 見出し（ヘッダー）行の高さ
-                    column_spacing=10,         # 列同士の横の隙間
-
-                    sort_column_index=sort_column_index,
-                    sort_ascending=sort_ascending,
-                    columns=[
-                        ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
-                        ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("edit")),
-                    ],
-                    rows=[
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[4],no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                #↓編集用アイコンの設定
-                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT,on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
-                            ]
-                        ) for row in filtered_data_rows
-                    ],
-                )
-
-                page.add(ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True))
-                status_label = ft.Text("", color="green", weight="bold")
-                page.update()
+                sort_column_index=sort_column_index,
+                sort_ascending=sort_ascending,
+                columns=[
+                    ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
+                    ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
+                    ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
+                    ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
+                    ft.DataColumn(ft.Text("edit")),
+                ],
+                rows=[
+                    ft.DataRow(
+                        cells=[
+                            ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                            ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                            ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                            ft.DataCell(ft.Text(row[4],no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                            #↓編集用アイコンの設定
+                            ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT,on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
+                        ]
+                    ) for row in filtered_data_rows
+                ],
+            )
+            page.add(ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True))
 
         except Exception as e: # どんなエラー（e）が起きたかを取得する
             # record が空の場合は、エラーメッセージを直接表示する
@@ -633,29 +352,19 @@ async def main(page: ft.Page):
 
     #画面を再読み込み（再構築）する関数を作る
     async def refresh_view():
-        nonlocal current_task
-        
-        # --- 追加：もし動いているタスクがあれば中断（キャンセル）する ---
-        if current_task is not None and not current_task.done():
-            current_task.cancel()
-            try:
-                await current_task # キャンセルが完了するのを待つ
-            except asyncio.CancelledError:
-                pass # キャンセル成功
-        
-        page.clean()
+        page.clean()  # いったん画面の中身を全部消す
         
         # モードによらず必ず表示するものを追加
         page.add(ft.Text("My家計簿", size=20),choice_segment)
 
-        # 4. 【重要】現在のモードのページ作成を「タスク」として1回だけ起動
-        # ここで await せずに create_task することで、スムーズに切り替わります
+        # モードに応じて表示し分ける
         if current_mode == "Analysis":
-            current_task = asyncio.create_task(make_analysispage())
+            # Analysisモードの表示内容
+            await make_analysispage()
         else:
-            current_task = asyncio.create_task(make_recordingpage())
-            
-        page.update()
+            # Expense / Income モードの表示内容
+            await make_recordingpage()
+        page.update() # 最後に画面を更新
 
     async def sort_column(e):
         nonlocal sort_column_index, sort_ascending
@@ -847,9 +556,10 @@ async def main(page: ft.Page):
     #保存ボタン作成
     save_button = ft.Button("スプレッドシートに保存",icon="save",on_click=save_to_sheets) 
 
+
     #カレンダーを仕込んでおく
     page.overlay.append(date_picker)
     
     await refresh_view()
 
-ft.app(target=main)
+ft.run(main)
