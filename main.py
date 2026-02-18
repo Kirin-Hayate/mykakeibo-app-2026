@@ -574,6 +574,10 @@ async def main(page: ft.Page):
             # 画面に追加
             page.add(summary_card)
 
+            # 読み込みが完了したのでメッセージを消去
+            if loading_text in page.controls:
+                page.controls.remove(loading_text)
+
             # --- 【重要】ソートの実行 ---
 
             if not filtered_data_rows:
@@ -638,6 +642,7 @@ async def main(page: ft.Page):
         #読み込み中　のメッセージを消去
         if loading_text in page.controls:
             page.controls.remove(loading_text)
+            page.update()
 
     #画面を再読み込み（再構築）する関数を作る
     async def refresh_view():
