@@ -132,7 +132,19 @@ async def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
 
     # 起動時の読み込みメッセージを表示
-    page.add(ft.Text("設定を読み込み中...", size=16))
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.add(
+        ft.Column(
+            [
+                ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Icon(name=ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
+                ft.Text("設定を読み込み中...", size=16, color=ft.Colors.ORANGE),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+    )
     page.update()
 
     #モード切替(Expense/Income/Analysis)
@@ -1165,6 +1177,9 @@ async def main(page: ft.Page):
     #カレンダーを仕込んでおく
     page.overlay.append(date_picker)
     
+    # 読み込み完了後、ページの配置を元に戻す
+    page.vertical_alignment = ft.MainAxisAlignment.START
+    page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
 ft.app(target=main)
