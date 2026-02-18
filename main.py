@@ -333,36 +333,68 @@ async def main(page: ft.Page):
             async def on_save(e):
                 dialog.open = False
                 page.update() 
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
+                page.update()
+                await asyncio.sleep(0.1) # アニメーション完了待ち
 
                 status_right.value = "保存中..."
                 status_right.color = "orange"
+                # オーバーレイからダイアログとDatePickerを完全に削除
+                if edit_date_picker in page.overlay:
+                    page.overlay.remove(edit_date_picker)
+                if dialog in page.overlay:
+                    page.overlay.remove(dialog)
                 page.update()
+
+                # 画面をクリアして「保存中」を表示（これで古い一覧が即座に消えます）
+                page.clean()
+                page.add(ft.Text("My家計簿", size=20), choice_segment)
+                page.add(ft.Text("データを保存中...", color="orange", size=16))
+                page.update()
+
                 # 新しい金額を計算
                 new_kingaku = float(edit_amount.value) * (-1 if row_data[1] == "Expense" else 1)
                 # UUID(index 6)は維持、日付は新しいものを使用
                 updated_record = [current_edit_date, current_edit_mode, new_kingaku, current_edit_category, edit_content.value, row_data[5], row_data[6]]
                 
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], updated_record, "UPDATE")
-                dialog.open = False
-                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
                 await refresh_view() # 画面更新
 
             # 「削除」を押したときの処理
             async def on_delete(e):
                 dialog.open = False
                 page.update() 
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
+                page.update()
+                await asyncio.sleep(0.1) # アニメーション完了待ち
 
                 status_left.value = "削除中..."
                 status_left.color = "orange"
+                # オーバーレイからダイアログとDatePickerを完全に削除
+                if edit_date_picker in page.overlay:
+                    page.overlay.remove(edit_date_picker)
+                if dialog in page.overlay:
+                    page.overlay.remove(dialog)
                 page.update()
+
+                # 画面をクリアして「削除中」を表示
+                page.clean()
+                page.add(ft.Text("My家計簿", size=20), choice_segment)
+                page.add(ft.Text("データを削除中...", color="orange", size=16))
+                page.update()
+
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], mode="DELETE")
-                dialog.open = False
-                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
                 await refresh_view()
 
-            def close_edit_dialog(e):
+            async def close_edit_dialog(e):
                 dialog.open = False
                 page.overlay.remove(edit_date_picker) # DatePickerのお片付け
+                page.update()
+                await asyncio.sleep(0.1)
+                if edit_date_picker in page.overlay:
+                    page.overlay.remove(edit_date_picker)
+                if dialog in page.overlay:
+                    page.overlay.remove(dialog)
                 page.update()
 
 
