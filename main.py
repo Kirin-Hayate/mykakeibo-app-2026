@@ -403,12 +403,20 @@ async def main(page: ft.Page):
 
             # --- 2. 決定ボタンが押された時の処理 ---
             async def on_apply(e):
-                # 入力が「空文字」または「None」なら None を代入するようにガードをかける
-                page.filter_query[0] = mode_dd.value if mode_dd.value else None
-                page.filter_query[1] = cat_dd.value if cat_dd.value else None
-                # 入力があればその値を、なければ None を代入する
-                page.filter_query[0] = mode_dd.value if mode_dd.value else None
-                page.filter_query[1] = cat_dd.value if cat_dd.value else None
+                # モードの判定：空文字や「指定なし」の場合は None（絞り込みなし）にする
+                if not mode_dd.value or mode_dd.value == "指定なし":
+                    page.filter_query[0] = None
+                else:
+                    page.filter_query[0] = mode_dd.value
+
+                # カテゴリの判定
+                if not cat_dd.value or cat_dd.value == "指定なし":
+                    page.filter_query[1] = None
+                else:
+                    page.filter_query[1] = cat_dd.value
+
+                page.filter_query[2] = keyword_tf.value if keyword_tf.value else None
+                page.filter_query[3] = oldest_date_tf.value if oldest_date_tf.value else None
                 page.filter_query[2] = keyword_tf.value if keyword_tf.value else None
                 page.filter_query[3] = oldest_date_tf.value if oldest_date_tf.value else None
                 page.filter_query[4] = latest_date_tf.value if latest_date_tf.value else None
