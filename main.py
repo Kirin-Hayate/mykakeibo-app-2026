@@ -188,7 +188,8 @@ async def main(page: ft.Page):
                         ft.IconButton(
                             icon=ft.Icons.DELETE, 
                             icon_color="red", 
-                            on_click=lambda e, c=cat: delete_category(c)
+                            data=cat,
+                            on_click=delete_category
                         )
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
                 )
@@ -203,7 +204,8 @@ async def main(page: ft.Page):
                 await asyncio.to_thread(SaveCategories, options_expense_list, options_income_list)
                 await render_cat_list()
 
-        async def delete_category(cat_name):
+        async def delete_category(e):
+            cat_name = e.control.data
             if cat_name in target_list:
                 target_list.remove(cat_name)
                 # スプシに保存
