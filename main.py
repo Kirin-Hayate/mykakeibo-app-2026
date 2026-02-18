@@ -231,6 +231,7 @@ async def main(page: ft.Page):
             # 初期値は今のデータから持ってくる
             current_edit_mode = row_data[1] 
             current_edit_category = row_data[3]
+            current_edit_date = row_data[0]
 
             # モード選択用チップの作成 ---
             mode_choice_expense = ft.Chip(
@@ -292,6 +293,38 @@ async def main(page: ft.Page):
                     show_checkmark=True,
                 ) for cat in all_categories
             ]
+
+            # --- 日付変更用のDatePicker設定 ---
+            async def on_edit_date_change(e):
+                nonlocal current_edit_date
+                if e.control.value:
+                    current_edit_date = e.control.value.strftime("%Y-%m-%d")
+                    edit_date_button.text = f"日付: {current_edit_date}"
+                    page.update()
+
+            try:
+                initial_date = datetime.strptime(row_data[0], "%Y-%m-%d")
+            except (ValueError, TypeError):
+                initial_date = datetime.now()
+
+            edit_date_picker = ft.DatePicker(
+                on_change=on_edit_date_change,
+                first_date=datetime(2000, 1, 1),
+                last_date=datetime(3000, 12, 31),
+                value=initial_date
+            )
+            page.overlay.append(edit_date_picker)
+
+            def open_edit_date_picker(e):
+                edit_date_picker.open = True
+                page.update()
+
+            edit_date_button = ft.ElevatedButton(
+                text=f"日付: {current_edit_date}",
+                icon=ft.Icons.CALENDAR_MONTH,
+                on_click=open_edit_date_picker
+            )
+
             edit_category = ft.TextField(label="カテゴリ", value=row_data[3])
             edit_amount = ft.TextField(label="金額", value=str(abs(float(row_data[2]))))
             edit_content = ft.TextField(label="メモ",multiline=True, value=row_data[4])
@@ -306,11 +339,12 @@ async def main(page: ft.Page):
                 page.update()
                 # 新しい金額を計算
                 new_kingaku = float(edit_amount.value) * (-1 if row_data[1] == "Expense" else 1)
-                # UUID(index 6)や日付などはそのまま維持したリストを作る
-                updated_record = [row_data[0], current_edit_mode, new_kingaku, current_edit_category, edit_content.value, row_data[5], row_data[6]]
+                # UUID(index 6)は維持、日付は新しいものを使用
+                updated_record = [current_edit_date, current_edit_mode, new_kingaku, current_edit_category, edit_content.value, row_data[5], row_data[6]]
                 
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], updated_record, "UPDATE")
                 dialog.open = False
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
                 await refresh_view() # 画面更新
 
             # 「削除」を押したときの処理
@@ -323,10 +357,12 @@ async def main(page: ft.Page):
                 page.update()
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], mode="DELETE")
                 dialog.open = False
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
                 await refresh_view()
 
             def close_edit_dialog(e):
                 dialog.open = False
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
                 page.update()
 
 
@@ -337,6 +373,8 @@ async def main(page: ft.Page):
             dialog = ft.AlertDialog(
                 title=ft.Text("Edit/Delete"),
                 content=ft.Column([
+                    ft.Text("日付", size=12, color="grey500"),
+                    edit_date_button,
                     ft.Text("モード", size=12, color="grey500"),
                     ft.Row([mode_choice_expense, mode_choice_income]),
                     ft.Text("カテゴリ", size=12, color="grey500"),
