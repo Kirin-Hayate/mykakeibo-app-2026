@@ -652,9 +652,14 @@ async def main(page: ft.Page):
             else:
                 #該当データがあるときだけsortを実行する
 
+                # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
+                # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
+                sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
+                target_idx = sort_map.get(sort_column_index, 0)
+
                 # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
                 filtered_data_rows.sort(
-                    key=lambda x: x[sort_column_index] if sort_column_index != 2 else (float(x[2]) if x[2] else 0),
+                    key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
                     reverse=not sort_ascending
                 )
                 # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
