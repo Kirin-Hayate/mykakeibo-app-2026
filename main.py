@@ -20,7 +20,7 @@ def Kakikomi(record):
     client = gspread.authorize(creds)
     #open: インターネット上にある膨大なファイルの中から、名前を頼りに特定のシートを見つけて接続を確立します。
     SHEET_NAME = "家計簿テストver202602032139" 
-    sheet = client.open(SHEET_NAME).sheet1
+    sheet = client.open(SHEET_NAME).worksheet("Recordings")
 
     # 3. 操作フェーズ（「命令」を送る）
     #append_row: 「一番下の空いている行に、このリストの内容を書き込め」という命令を送ります。
@@ -65,6 +65,62 @@ def Yomikomi():
     data = sheet.get_all_values()
     return data
 
+# カテゴリ設定を読み込む関数 LoadCategories()
+def LoadCategories():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    client = gspread.authorize(creds)
+    SHEET_NAME = "家計簿テストver202602032139"
+    
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+        client = gspread.authorize(creds)
+        SHEET_NAME = "家計簿テストver202602032139"
+        sheet = client.open(SHEET_NAME).worksheet("Settings")
+        # 1列目(Expense)と2列目(Income)を取得（1行目は見出しなので除外）
+        expense_list = [x for x in sheet.col_values(1)[1:] if x] # 空文字除去
+        income_list = [x for x in sheet.col_values(2)[1:] if x]
+        return expense_list, income_list
+    except gspread.exceptions.WorksheetNotFound:
+        print("Settingsシートが見つかりません。デフォルト値を使用します。")
+        return [], []
+    except Exception as e:
+        print(f"カテゴリ読み込みエラー: {e}")
+        return [], []
+
+# カテゴリ設定を保存する関数 SaveCategories()
+def SaveCategories(expense_list, income_list):
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    client = gspread.authorize(creds)
+    SHEET_NAME = "家計簿テストver202602032139"
+    
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+        client = gspread.authorize(creds)
+        SHEET_NAME = "家計簿テストver202602032139"
+        sheet = client.open(SHEET_NAME).worksheet("Settings")
+        
+        # データを作成（見出し + データ）
+        # 行ごとに [Expenseカテゴリ, Incomeカテゴリ] の形にする必要がある
+        rows = [["Expense", "Income"]] # ヘッダー
+        
+        max_len = max(len(expense_list), len(income_list))
+        for i in range(max_len):
+            exp = expense_list[i] if i < len(expense_list) else ""
+            inc = income_list[i] if i < len(income_list) else ""
+            rows.append([exp, inc])
+            
+        # シートをクリアして書き込み
+        sheet.clear()
+        sheet.update(range_name="A1", values=rows)
+        print("カテゴリ設定を保存しました")
+        
+    except Exception as e:
+        print(f"カテゴリ保存エラー: {e}")
+
+
+
 #ページを駆動する部分
 async def main(page: ft.Page):
     # 現在実行中のメインタスクを保持する変数
@@ -75,13 +131,28 @@ async def main(page: ft.Page):
     page.window_height = 700
     page.theme_mode = ft.ThemeMode.DARK
 
+    # 起動時の読み込みメッセージを表示
+    page.add(ft.Text("設定を読み込み中...", size=16))
+    page.update()
+
     #モード切替(Expense/Income/Analysis)
     current_mode = "Expense"
 
     #カテゴリ選択を横スクロールにするための準備(初期値、動作設定)
     selected_category = None
-    options_expense_list = ["Wagner", "SYC", "交通", "食費", "交際", "勉強,研究", "電話", "娯楽", "美容", "税", "衣服", "旅行", "給与誤差脱漏", "医療", "その他"]
-    options_income_list = ["FreeStep", "お小遣い", "その他"]
+    
+    # --- カテゴリの初期化（スプシから読み込み、なければデフォルト） ---
+    loaded_expense, loaded_income = await asyncio.to_thread(LoadCategories)
+    
+    if loaded_expense:
+        options_expense_list = loaded_expense
+    else:
+        options_expense_list = ["Wagner", "SYC", "交通", "食費", "交際", "勉強,研究", "電話", "娯楽", "美容", "税", "衣服", "旅行", "給与誤差脱漏", "医療", "その他"]
+        
+    if loaded_income:
+        options_income_list = loaded_income
+    else:
+        options_income_list = ["FreeStep", "お小遣い", "その他"]
 
     # チップが押されたときの動作
     async def on_category_select(e):
@@ -97,9 +168,89 @@ async def main(page: ft.Page):
     #メッセージ表示するやつ(内容はのちのち変更)
     status_label = ft.Text("", color="green", weight="bold")
 
+    # --- カテゴリ編集ダイアログ ---
+    async def open_category_settings(e):
+        # 現在のモードのリストを参照
+        target_list = options_expense_list if current_mode == "Expense" else options_income_list
+        
+        new_cat_input = ft.TextField(label="新しいカテゴリ", expand=True, height=40, text_size=14)
+        
+        # カテゴリリストを表示するColumn
+        cat_list_col = ft.Column(scroll=ft.ScrollMode.AUTO, height=300)
+
+        async def render_cat_list():
+            cat_list_col.controls.clear()
+            # リストをソートして表示
+            for cat in sorted(target_list):
+                cat_list_col.controls.append(
+                    ft.Row([
+                        ft.Text(cat, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE, 
+                            icon_color="red", 
+                            on_click=lambda e, c=cat: delete_category(c)
+                        )
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                )
+            if settings_dialog.open: # ダイアログが開いている時だけ更新
+                page.update()
+
+        async def add_category(e):
+            if new_cat_input.value and new_cat_input.value not in target_list:
+                target_list.append(new_cat_input.value)
+                new_cat_input.value = ""
+                # スプシに保存
+                await asyncio.to_thread(SaveCategories, options_expense_list, options_income_list)
+                await render_cat_list()
+
+        async def delete_category(cat_name):
+            if cat_name in target_list:
+                target_list.remove(cat_name)
+                # スプシに保存
+                await asyncio.to_thread(SaveCategories, options_expense_list, options_income_list)
+                await render_cat_list()
+
+        async def close_settings_dialog(e):
+            settings_dialog.open = False
+            page.update()
+            await asyncio.sleep(0.1)
+            page.overlay.remove(settings_dialog)
+            page.update()
+            await refresh_view() # 画面更新してチップに反映
+
+        settings_dialog = ft.AlertDialog(
+            title=ft.Text(f"{current_mode} カテゴリ編集"),
+            content=ft.Container(
+                content=ft.Column([
+                    ft.Row([new_cat_input, ft.IconButton(icon=ft.Icons.ADD, on_click=add_category)]),
+                    ft.Divider(),
+                    cat_list_col
+                ], tight=True),
+                width=300
+            ),
+            actions=[
+                ft.TextButton("閉じる", on_click=close_settings_dialog)
+            ]
+        )
+        
+        # 初回描画
+        await render_cat_list()
+
+        page.overlay.append(settings_dialog)
+        settings_dialog.open = True
+        page.update()
+
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
     async def make_recordingpage():
         nonlocal status_label
+        
+        # カテゴリ設定ボタン
+        settings_button = ft.IconButton(
+            icon=ft.Icons.SETTINGS,
+            tooltip="カテゴリの追加・削除",
+            on_click=open_category_settings
+        )
+
         page.add(
             ft.Row(
                 [date_label, dateselect_button],
@@ -109,7 +260,10 @@ async def main(page: ft.Page):
             ft.Text("カテゴリを選択", size=12, color="grey500"),
             category_chips,
             content_input,
-            save_button,
+            ft.Row([
+                save_button,
+                settings_button
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             status_label
         )
     
