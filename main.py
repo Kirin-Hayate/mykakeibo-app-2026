@@ -121,6 +121,9 @@ async def main(page: ft.Page):
     #Analysisモードの画面を作製する関数　make_analysispage()
     async def make_analysispage():
         
+        # エラー表示用に事前に定義しておく
+        status_label = ft.Text("", color="green", weight="bold")
+
         # --- 検索条件をページに記憶させる（リセット防止） ---
         if not hasattr(page, "filter_query"):
             page.filter_query = [None, None, None, None, None, None, None]
@@ -651,7 +654,7 @@ async def main(page: ft.Page):
 
                 # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
                 filtered_data_rows.sort(
-                    key=lambda x: x[sort_column_index] if sort_column_index != 2 else float(x[2]),
+                    key=lambda x: x[sort_column_index] if sort_column_index != 2 else (float(x[2]) if x[2] else 0),
                     reverse=not sort_ascending
                 )
                 # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
@@ -686,7 +689,6 @@ async def main(page: ft.Page):
                 )
 
                 page.add(ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True))
-                status_label = ft.Text("", color="green", weight="bold")
                 page.update()
 
         except Exception as e: # どんなエラー（e）が起きたかを取得する
