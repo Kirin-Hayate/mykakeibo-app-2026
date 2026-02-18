@@ -678,27 +678,34 @@ async def main(page: ft.Page):
 
             # --- 2. 表示用コンポーネントの作成 ---
             summary_card = ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Icon(ft.Icons.PAYMENTS, color="orange"),
-                        ft.Text(f"支出合計: ¥{total_expense:,.0f}", color="orange", weight="bold"),
-                    ]),
-                    ft.Row([
-                        ft.Icon(ft.Icons.SAVINGS, color="green"),
-                        ft.Text(f"収入合計: ¥{total_income:,.0f}", color="green", weight="bold"),
-                    ]),
-                    ft.Divider(height=1, color="grey700"),
-                    ft.Row([
-                        ft.Text("収支:", size=16),
+                content=ft.Row([
+                    # Expense
+                    ft.Column([
+                        ft.Text("Expense", size=12, color="grey500"),
+                        ft.Text(f"{total_expense:,.0f}", color="orange", weight="bold", size=16),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    
+                    # Income
+                    ft.Column([
+                        ft.Text("Income", size=12, color="grey500"),
+                        ft.Text(f"+{total_income:,.0f}", color="green", weight="bold", size=16),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+
+                    # =
+                    ft.Text("=", size=20, color="grey500"),
+
+                    # Balance
+                    ft.Column([
+                        ft.Text("収支", size=12, color="grey500"),
                         ft.Text(
-                            f"¥{balance:,.0f}", 
-                            size=20, 
+                            f"{balance:,.0f}", 
+                            size=16, 
                             weight="bold",
                             color="green" if balance >= 0 else "orange" # プラスなら緑、マイナスならオレンジ
                         ),
-                    ]),
-                ], spacing=5),
-                padding=5,
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                ], alignment=ft.MainAxisAlignment.SPACE_EVENLY, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=10,
                 bgcolor=ft.Colors.GREY_900,
                 border_radius=10,
                 border=ft.border.all(1, "grey800"),
