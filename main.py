@@ -379,14 +379,69 @@ async def main(page: ft.Page):
                 value=page.filter_query[0]
             )
             # プルダウン：カテゴリ (空欄許可)
+            # --- カテゴリ複数選択の実装 ---
             all_cat_options = sorted(list(set(options_expense_list + options_income_list)))
-            cat_dd = ft.Dropdown(
-                label="",
-                options=[ft.dropdown.Option(key="", text="指定なし"),]+[ft.dropdown.Option(c) for c in all_cat_options],
-                expand=True,
-                text_size=12,
-                value=page.filter_query[1]
+
+            
+            # 現在の設定値を読み込む（リストでなければ空リストにする）
+            initial_cats = page.filter_query[1] if isinstance(page.filter_query[1], list) else []
+            selected_cats = set(initial_cats) # 操作用の一時セット
+
+            # 選択状況を表示するテキスト
+            cat_status_text = ft.Text(
+                value=",".join(sorted(list(selected_cats))) if selected_cats else "指定なし",
+                size=12,
+                color="white" if selected_cats else "grey",
+                no_wrap=True,
+                overflow=ft.TextOverflow.ELLIPSIS,
+                expand=True
             )
+
+            # チェックボックスの変更時
+            def on_cat_checkbox_change(e):
+                if e.control.value:
+                    selected_cats.add(e.control.label)
+                else:
+                    selected_cats.discard(e.control.label)
+
+            # カテゴリ選択ダイアログを閉じる処理
+            def close_cat_selector(e):
+                cat_selector_dialog.open = False
+                # 親ダイアログの表示更新
+                cat_status_text.value = ",".join(sorted(list(selected_cats))) if selected_cats else "指定なし"
+                cat_status_text.color = "white" if selected_cats else "grey"
+                dialog.open = True # 親ダイアログが閉じないように明示的に指定
+                page.update()
+
+            # カテゴリ選択ダイアログの構築
+            cat_selector_dialog = ft.AlertDialog(
+                title=ft.Text("カテゴリを選択"),
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Checkbox(label=c, value=(c in selected_cats), on_change=on_cat_checkbox_change) 
+                        for c in all_cat_options
+                    ], scroll=ft.ScrollMode.AUTO),
+                    height=300, width=250
+                ),
+                actions=[ft.TextButton("完了", on_click=close_cat_selector)],
+                modal=True # ダイアログ外クリックで閉じないようにする
+            )
+
+            # カテゴリ選択ボタン処理
+            def open_cat_selector(e):
+                # ダイアログ内のチェックボックスの状態を現在の selected_cats に合わせる（再描画）
+                col = cat_selector_dialog.content.content
+                for checkbox in col.controls:
+                    checkbox.value = (checkbox.label in selected_cats)
+                # 重複追加を防ぐ
+                if cat_selector_dialog not in page.overlay:
+                    page.overlay.append(cat_selector_dialog)
+                
+                cat_selector_dialog.open = True
+                page.update()
+
+            cat_select_btn = ft.ElevatedButton("選択", on_click=open_cat_selector, height=30, style=ft.ButtonStyle(padding=5))
+
             # 直接入力：キーワード
             keyword_tf = ft.TextField(label="keyword", expand=True, text_size=12,value=page.filter_query[2])
 
@@ -408,15 +463,12 @@ async def main(page: ft.Page):
                     page.filter_query[0] = None
                 else:
                     page.filter_query[0] = mode_dd.value
-
-                # カテゴリの判定
-                if not cat_dd.value or cat_dd.value == "指定なし":
-                    page.filter_query[1] = None
+                # カテゴリの判定（セットが空ならNone、あればリスト化して保存）
+                if not selected_cats:
+                     page.filter_query[1] = None
                 else:
-                    page.filter_query[1] = cat_dd.value
-
-                page.filter_query[2] = keyword_tf.value if keyword_tf.value else None
-                page.filter_query[3] = oldest_date_tf.value if oldest_date_tf.value else None
+                    page.filter_query[1] = sorted(list(selected_cats))
+ 
                 page.filter_query[2] = keyword_tf.value if keyword_tf.value else None
                 page.filter_query[3] = oldest_date_tf.value if oldest_date_tf.value else None
                 page.filter_query[4] = latest_date_tf.value if latest_date_tf.value else None
@@ -424,21 +476,28 @@ async def main(page: ft.Page):
                 page.filter_query[6] = float(min_amt_tf.value) if min_amt_tf.value.strip() else None
                 
                 dialog.open = False
+                page.update() # 一旦閉じる描画を反映
+                await asyncio.sleep(0.1) # アニメーション完了を待つ
+                page.overlay.remove(dialog) # 完全に削除
+                page.update()
                 await refresh_view() # 画面を再描画してフィルターを適用
 
-            def close_filter_dialog(e):
+            async def close_filter_dialog(e):
                 dialog.open = False
+                page.update()
+                await asyncio.sleep(0.1) # アニメーション完了を待つ
+                page.overlay.remove(dialog) # 完全に削除
                 page.update()
                 
             # --- 3. ダイアログのレイアウト構築 ---
             dialog = ft.AlertDialog(
+                modal=True, # ダイアログ外クリックで閉じないようにする
                 title=ft.Text("絞り込み条件", size=16, weight="bold"),
                 content=ft.Column([
                     # 1行目: モード と カテゴリ（選択系）
                     
-                    ft.Text("mode:"), mode_dd, 
-                    ft.Text("category:"), cat_dd,
-
+                    ft.Row([ft.Text("mode:"), mode_dd], alignment=ft.MainAxisAlignment.START),
+                    ft.Row([ft.Text("category:"), cat_select_btn, cat_status_text], alignment=ft.MainAxisAlignment.START),
 
                     # 2行目: キーワード（単一入力系）
                     ft.Row([
@@ -482,7 +541,7 @@ async def main(page: ft.Page):
                 spans=[
                     ft.TextSpan(f"[mode]:{q[0] or 'All'} ", style=get_filter_style(q[0])),
                     ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
-                    ft.TextSpan(f"[category]:{q[1] or 'All'} ", style=get_filter_style(q[1])),
+                    ft.TextSpan(f"[category]:{','.join(q[1]) if q[1] else 'All'} ", style=get_filter_style(q[1])),
                     ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
                     ft.TextSpan(f"[keyword]:{q[2] or 'None'} ", style=get_filter_style(q[2])),
                     ft.TextSpan(", ", style=ft.TextStyle(color="grey800")),
@@ -503,8 +562,9 @@ async def main(page: ft.Page):
                 filtered_record = data
                 #mode で絞る
                 filtered_record = [row for row in filtered_record if filter_query[0] is None or row[1]== filter_query[0]]
-                #categoryで絞る
-                filtered_record = [row for row in filtered_record if filter_query[1] is None or row[3]== filter_query[1]]
+                #categoryで絞る (リストに含まれているか)
+                if filter_query[1] is not None and len(filter_query[1]) > 0:
+                    filtered_record = [row for row in filtered_record if row[3] in filter_query[1]]
                 #keywordで絞る
                 filtered_record = [row for row in filtered_record if filter_query[2] is None or filter_query[2] in row[4]]
                 #oldest_dateで絞る
@@ -745,8 +805,8 @@ async def main(page: ft.Page):
     date_picker = ft.DatePicker(
     on_change=handle_change,  # 日付が選択された時に動く関数
     value = datetime.now(), #初期選択位置を今日にする
-    first_date=datetime(2023, 1, 1), # 選択可能な最小日
-    last_date=datetime(2100, 12, 31)  # 選択可能な最大日
+    first_date=datetime(1600, 1, 1), # 選択可能な最小日
+    last_date=datetime(3000, 12, 31)  # 選択可能な最大日
     )
 
     #日付の変更ボタンを押したときの動作を規定
