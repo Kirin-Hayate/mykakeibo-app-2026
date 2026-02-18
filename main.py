@@ -638,8 +638,10 @@ async def main(page: ft.Page):
                 #categoryで絞る (リストに含まれているか)
                 if filter_query[1] is not None and len(filter_query[1]) > 0:
                     filtered_record = [row for row in filtered_record if row[3] in filter_query[1]]
-                #keywordで絞る
-                filtered_record = [row for row in filtered_record if filter_query[2] is None or filter_query[2] in row[4]]
+                #keywordで絞る (スペース区切りでOR検索)
+                if filter_query[2]:
+                    keywords = filter_query[2].replace("　", " ").split()
+                    filtered_record = [row for row in filtered_record if any(k in row[4] for k in keywords)]
                 #oldest_dateで絞る
                 filtered_record = [row for row in filtered_record if filter_query[3] is None or filter_query[3] <= row[0]]
                 #latest_dateで絞る
