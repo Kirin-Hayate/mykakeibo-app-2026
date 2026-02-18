@@ -745,7 +745,7 @@ async def main(page: ft.Page):
                 data_table = ft.DataTable(
                     #高さ,幅
                     data_row_min_height=20,    # 行の最小高さ
-                    data_row_max_height=40,    # 行の最大高さ
+                data_row_max_height=float("inf"),    # 行の最大高さ
                     heading_row_height=20,     # 見出し（ヘッダー）行の高さ
                     column_spacing=10,         # 列同士の横の隙間
 
