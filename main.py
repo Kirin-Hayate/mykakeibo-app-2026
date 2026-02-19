@@ -45,7 +45,7 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
         
         if mode == "UPDATE":
             # 指定した範囲（A列〜G列）を新しいデータで上書き
-            sheet.update(f"A{row_index}:G{row_index}", [new_record])
+            sheet.update(range_name=f"A{row_index}:G{row_index}", values=[new_record])
         elif mode == "DELETE":
             # その行を削除
             sheet.delete_rows(row_index)
