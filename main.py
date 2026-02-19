@@ -948,7 +948,7 @@ async def main(page: ft.Page):
                                 # widthを指定して強制的に折り返しさせる
                                 ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
                                 #↓編集用アイコンの設定
-                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT,on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
+                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY, on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
                             ]
                         ) for row in filtered_data_rows
                     ],
