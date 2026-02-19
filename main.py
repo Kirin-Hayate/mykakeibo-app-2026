@@ -899,6 +899,19 @@ async def main(page: ft.Page):
             else:
                 #該当データがあるときだけsortを実行する
 
+                # --- 画面幅に応じたレイアウト調整 ---
+                # page.width が取得できない場合を考慮してデフォルト値を設定
+                current_width = page.width if page.width else 400
+                
+                # 閾値を設定 (例: 600px以上ならPCライクな広々表示)
+                if current_width >= 600:
+                    table_column_spacing = 10
+                    # メモ欄の幅を動的に計算 (画面幅 - 他の列の概算幅)
+                    memo_col_width = max(200, current_width - 450) 
+                else:
+                    table_column_spacing = 2
+                    memo_col_width = 100
+
                 # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
                 # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
                 sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
@@ -915,7 +928,7 @@ async def main(page: ft.Page):
                     data_row_min_height=20,    # 行の最小高さ
                 data_row_max_height=float("inf"),    # 行の最大高さ
                     heading_row_height=20,     # 見出し（ヘッダー）行の高さ
-                    column_spacing=10,         # 列同士の横の隙間
+                    column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
 
                     sort_column_index=sort_column_index,
                     sort_ascending=sort_ascending,
@@ -932,7 +945,8 @@ async def main(page: ft.Page):
                                 ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
                                 ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
                                 ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[4],no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                                # widthを指定して強制的に折り返しさせる
+                                ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
                                 #↓編集用アイコンの設定
                                 ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT,on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
                             ]
