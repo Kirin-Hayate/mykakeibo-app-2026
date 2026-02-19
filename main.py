@@ -292,6 +292,9 @@ async def main(page: ft.Page):
         # エラー表示用に事前に定義しておく
         status_label = ft.Text("", color="green", weight="bold")
 
+        # データ読み込み前にボタンが押された場合の対策
+        filtered_data_rows = []
+
         # --- 検索条件をページに記憶させる（リセット防止） ---
         if not hasattr(page, "filter_query"):
             page.filter_query = [None, None, None, None, None, None, None]
@@ -311,37 +314,128 @@ async def main(page: ft.Page):
                 else:
                     income_summary[cat] = income_summary.get(cat, 0) + amt
 
-            def create_sections(summary_dict):
-                # 最新版のカラーパレット指定（大文字Colors）
+            # 集計データをソート（金額の降順）
+            sorted_expense = sorted(expense_summary.items(), key=lambda x: x[1], reverse=True)
+            sorted_income = sorted(income_summary.items(), key=lambda x: x[1], reverse=True)
+
+            def create_semicircle_chart_and_table(sorted_data, is_expense=True):
+                if not sorted_data:
+                    return ft.Text("データなし")
+
+                total_val = sum(v for k, v in sorted_data)
+                
+                # 色と表示形式の設定
+                total_color = "orange" if is_expense else "green"
+                total_text = f"-¥{total_val:,.0f}" if is_expense else f"¥{total_val:,.0f}"
+
                 palette = [ft.Colors.BLUE, ft.Colors.RED, ft.Colors.GREEN, 
-                           ft.Colors.AMBER, ft.Colors.PURPLE, ft.Colors.CYAN, ft.Colors.ORANGE]
+                           ft.Colors.AMBER, ft.Colors.PURPLE, ft.Colors.CYAN, ft.Colors.ORANGE, ft.Colors.TEAL, ft.Colors.PINK]
+                
                 sections = []
-                for i, (cat, val) in enumerate(summary_dict.items()):
+                table_rows = []
+
+                # データ部分のセクション作成
+                for i, (cat, val) in enumerate(sorted_data):
+                    rank = i + 1
+                    percentage = (val / total_val) * 100 if total_val > 0 else 0
+                    color = palette[i % len(palette)]
+                    
+                    # グラフ用セクション（順位のみ表示）
                     sections.append(
-                        ft.PieChartSection( # charts. 不要！ft.直下で呼べます
+                        ft.PieChartSection(
                             value=val,
-                            title=f"{cat}\n¥{val:,.0f}",
-                            color=palette[i % len(palette)],
+                            title=str(rank),
+                            color=color,
                             radius=50,
-                            title_style=ft.TextStyle(size=10, weight="bold", color="white"),
+                            title_style=ft.TextStyle(size=12, weight="bold", color="white"),
                         )
                     )
-                return sections
+                    
+                    # テーブル用行（順位/カテゴリ名/割合/金額）
+                    table_rows.append(
+                        ft.DataRow(
+                            cells=[
+                                ft.DataCell(ft.Container(
+                                    content=ft.Text(str(rank), color="white", size=9, weight="bold"),
+                                    bgcolor=color,
+                                    border_radius=10,
+                                    width=16, height=16,
+                                    alignment=ft.alignment.center
+                                )),
+                                ft.DataCell(ft.Text(cat, size=12)),
+                                ft.DataCell(ft.Text(f"{percentage:.1f}%", size=12)),
+                                ft.DataCell(ft.Text(f"¥{val:,.0f}", size=12)),
+                            ]
+                        )
+                    )
 
-            # 最新版のPieChart構築
-            expense_chart = ft.PieChart(
-                sections=create_sections(expense_summary),
-                sections_space=2,
-                center_space_radius=30,
-                expand=True
-            ) if expense_summary else ft.Text("支出データなし")
+                # 半円にするための透明なダミーセクション（合計値と同じサイズ）
+                sections.append(
+                    ft.PieChartSection(
+                        value=total_val,
+                        title="",
+                        color=ft.Colors.TRANSPARENT,
+                        radius=50
+                    )
+                )
 
-            income_chart = ft.PieChart(
-                sections=create_sections(income_summary),
-                sections_space=2,
-                center_space_radius=30,
-                expand=True
-            ) if income_summary else ft.Text("収入データなし")
+                # チャートの構築
+                # start_degree_offset=180 で9時の位置から開始
+                # 時計回りにデータが配置され、下半分（透明）で円が閉じる
+                chart = ft.PieChart(
+                    sections=sections,
+                    sections_space=0,
+                    center_space_radius=40,
+                    start_degree_offset=180,
+                    expand=True
+                )
+
+                # チャートと合計金額を重ねるためのStack
+                chart_stack = ft.Stack(
+                    [
+                        chart,
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Text("Total", size=10, color="grey"),
+                                ft.Text(total_text, size=14, weight="bold", color=total_color)
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                            alignment=ft.alignment.center,
+                            padding=ft.padding.only(bottom=10) # 中心より少し上に配置
+                        )
+                    ],
+                    alignment=ft.alignment.center
+                )
+
+                # テーブルの構築
+                table = ft.DataTable(
+                    columns=[
+                        ft.DataColumn(ft.Text("順位")),
+                        ft.DataColumn(ft.Text("カテゴリ")),
+                        ft.DataColumn(ft.Text("割合")),
+                        ft.DataColumn(ft.Text("金額")),
+                    ],
+                    rows=table_rows,
+                    heading_row_height=0,
+                    data_row_min_height=18,
+                    column_spacing=10
+                )
+
+                # レイアウト調整
+                # チャートの下半分は透明なので、高さを制限して余白を削る工夫
+                return ft.Column([
+                    ft.Container(
+                        chart_stack, 
+                        height=180, # 円全体(直径180)が収まる高さを確保して描画崩れを防ぐ
+                        alignment=ft.alignment.center,
+                        # bottomのマイナスを減らして、下のテーブルとの間隔を確保（食い込み防止）
+                        margin=ft.margin.only(top=0, bottom=-70) 
+                    ), 
+                    table
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
+
+            # コンテンツ生成
+            expense_content = create_semicircle_chart_and_table(sorted_expense, is_expense=True)
+            income_content = create_semicircle_chart_and_table(sorted_income, is_expense=False)
 
             def close_report(e):
                 report_dialog.open = False
@@ -353,10 +447,10 @@ async def main(page: ft.Page):
                 title=ft.Text("収支内訳レポート"),
                 content=ft.Column([
                     ft.Text("支出の内訳", color="orange", weight="bold"),
-                    ft.Container(expense_chart, height=200, padding=10),
+                    expense_content,
                     ft.Divider(),
                     ft.Text("収入の内訳", color="green", weight="bold"),
-                    ft.Container(income_chart, height=200, padding=10),
+                    income_content,
                 ], scroll=ft.ScrollMode.ADAPTIVE, tight=True),
                 actions=[
                     ft.TextButton("閉じる", on_click=close_report)
