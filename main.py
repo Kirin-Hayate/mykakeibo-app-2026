@@ -494,6 +494,12 @@ async def main(page: ft.Page):
                     ),
                     ft.Text("←detailed report", size=10, weight="bold"),
 
+                    ft.IconButton(
+                        icon=ft.Icons.SHOW_CHART, 
+                        icon_size=25, 
+                        tooltip="推移を表示" 
+                    ),
+                    ft.Text("←timeline", size=10, weight="bold"),
                 ],
                 alignment=ft.MainAxisAlignment.START, # 左寄せにする（これで隣接します）
                 vertical_alignment=ft.CrossAxisAlignment.CENTER, # 上下の中央を揃える
