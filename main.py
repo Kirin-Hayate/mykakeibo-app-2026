@@ -1087,6 +1087,7 @@ async def main(page: ft.Page):
     #カテゴリ選択チップの作成
     category_chips = ft.Row(
         scroll=ft.ScrollMode.ADAPTIVE, # 横スクロールを有効に
+        height=70, # スクロールバーとチップが重ならないように高さを確保
         controls=[
             ft.Chip(
                 label=ft.Text(name), # options_expenseの中身をチップにする
