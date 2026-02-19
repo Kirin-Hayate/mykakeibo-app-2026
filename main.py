@@ -445,13 +445,27 @@ async def main(page: ft.Page):
             # ダイアログの表示
             report_dialog = ft.AlertDialog(
                 title=ft.Text("収支内訳レポート"),
-                content=ft.Column([
-                    ft.Text("支出の内訳", color="orange", weight="bold"),
-                    expense_content,
-                    ft.Divider(),
-                    ft.Text("収入の内訳", color="green", weight="bold"),
-                    income_content,
-                ], scroll=ft.ScrollMode.ADAPTIVE, tight=True),
+                content=ft.Container(
+                    width=900,
+                    height=500,
+                    content=ft.Row([
+                        ft.Container(
+                            width=220, 
+                            content=ft.Column([
+                                ft.Text("支出の内訳", color="orange", weight="bold"),
+                                expense_content,
+                            ], scroll=ft.ScrollMode.AUTO)
+                        ),
+                        ft.VerticalDivider(width=1, color="grey"),
+                        ft.Container(
+                            width=220, 
+                            content=ft.Column([
+                                ft.Text("収入の内訳", color="green", weight="bold"),
+                                income_content,
+                            ], scroll=ft.ScrollMode.AUTO)
+                        ),
+                    ], scroll=ft.ScrollMode.AUTO, vertical_alignment=ft.CrossAxisAlignment.START)
+                ),
                 actions=[
                     ft.TextButton("閉じる", on_click=close_report)
                 ]
@@ -473,7 +487,7 @@ async def main(page: ft.Page):
                     ft.Text("←filtering", size=10, weight="bold"),
 
                     ft.IconButton(
-                        icon=ft.Icons.TIMELINE, 
+                        icon=ft.Icons.PIE_CHART, 
                         icon_size=25, # 文字のサイズに合わせると綺麗です
                         on_click= open_detailed_report,
                         tooltip="詳細な分析を開く" # ホバーした時に説明が出ます
