@@ -823,11 +823,27 @@ async def main(page: ft.Page):
                 await asyncio.sleep(0.1) # アニメーション完了を待つ
                 page.overlay.remove(dialog) # 完全に削除
                 page.update()
+
+            # --- 2.5 All Clearボタンの処理 ---
+            def on_clear(e):
+                mode_dd.value = ""
+                selected_cats.clear()
+                cat_status_text.value = "指定なし"
+                cat_status_text.color = "grey"
+                keyword_tf.value = ""
+                oldest_date_tf.value = ""
+                latest_date_tf.value = ""
+                max_amt_tf.value = ""
+                min_amt_tf.value = ""
+                page.update()
                 
             # --- 3. ダイアログのレイアウト構築 ---
             dialog = ft.AlertDialog(
                 modal=True, # ダイアログ外クリックで閉じないようにする
-                title=ft.Text("絞り込み条件", size=16, weight="bold"),
+                title=ft.Row([
+                    ft.Text("絞り込み条件", size=16, weight="bold"),
+                    ft.TextButton("All Clear", icon=ft.Icons.CLEAR_ALL, on_click=on_clear, style=ft.ButtonStyle(color="red"))
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 content=ft.Column([
                     # 1行目: モード と カテゴリ（選択系）
                     
