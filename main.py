@@ -5,6 +5,7 @@ from datetime import datetime
 import asyncio
 from datetime import timedelta
 import uuid
+import math
 
 #スプシへの書き込みを行う関数 Kakikomi()
 def Kakikomi(record):
@@ -524,11 +525,12 @@ async def main(page: ft.Page):
                 cum_bal += (inc + exp)
                 
                 ts = to_ts(d)
+                rel_x = ts - min_x # 開始日を0とする相対座標に変換
                 
                 # ツールチップに日付と金額を表示
-                data_inc.append(ft.LineChartDataPoint(ts, cum_inc, tooltip=f"{d}\nInc: ¥{cum_inc:,.0f}"))
-                data_exp.append(ft.LineChartDataPoint(ts, cum_exp, tooltip=f"{d}\nExp: ¥{cum_exp:,.0f}"))
-                data_bal.append(ft.LineChartDataPoint(ts, cum_bal, tooltip=f"{d}\nBal: ¥{cum_bal:,.0f}"))
+                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"{d}\nInc: ¥{cum_inc:,.0f}"))
+                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"{d}\nExp: ¥{cum_exp:,.0f}"))
+                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{d}\nBal: ¥{cum_bal:,.0f}"))
 
             # 4. 表示切り替え用のステート
             show_inc = True
@@ -567,29 +569,87 @@ async def main(page: ft.Page):
                     line_series.append(ft.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
                     all_visible_points.extend(data_bal)
 
-                # Y軸範囲計算
+                # --- Y軸（金額）の計算: キリのいい間隔にする ---
                 if all_visible_points:
                     vals = [p.y for p in all_visible_points]
-                    min_y, max_y = min(vals), max(vals)
-                    margin = (max_y - min_y) * 0.1 if max_y != min_y else 100
-                    chart.min_y = min_y - margin
-                    chart.max_y = max_y + margin
+                    raw_min_y, raw_max_y = min(vals), max(vals)
                 else:
-                    chart.min_y, chart.max_y = 0, 100
+                    raw_min_y, raw_max_y = 0, 100
+
+                # レンジ計算
+                y_range = raw_max_y - raw_min_y
+                if y_range == 0: y_range = 100
+
+                # キリのいいインターバルを計算 (1, 2, 5の倍数×10のn乗)
+                target_steps = 5
+                rough_step = y_range / target_steps
+                magnitude = 10 ** math.floor(math.log10(rough_step)) if rough_step > 0 else 1
+                normalized_step = rough_step / magnitude
+                
+                if normalized_step <= 1: nice_step = 1
+                elif normalized_step <= 2: nice_step = 2
+                elif normalized_step <= 5: nice_step = 5
+                else: nice_step = 10
+                
+                y_interval = nice_step * magnitude
+
+                # min_y, max_y をインターバルの倍数に広げて余裕を持たせる
+                chart.min_y = math.floor(raw_min_y / y_interval) * y_interval - y_interval
+                chart.max_y = math.ceil(raw_max_y / y_interval) * y_interval + y_interval
 
                 chart.data_series = line_series
-                chart.min_x = min_x
-                chart.max_x = max_x
+                chart.min_x = 0
+                chart.max_x = max_x - min_x
 
-                # X軸ラベル生成 (日付表示)
-                interval = (max_x - min_x) / 4 if max_x != min_x else day_seconds
+                # --- X軸（日付）の計算: 間引き処理 ---
+                duration = max_x - min_x
+                day_sec = 24 * 3600
+                
+                # 画面幅に合わせてラベル数を制限（少し緩めて表示数を確保）
+                if duration <= 14 * day_sec: # 2週間以内 -> 1日ごと
+                    x_interval = day_sec
+                    date_fmt = "%m/%d"
+                elif duration <= 90 * day_sec: # 3ヶ月以内 -> 1週間ごと
+                    x_interval = 7 * day_sec
+                    date_fmt = "%m/%d"
+                elif duration <= 365 * day_sec: # 1年以内 -> 1ヶ月ごと
+                    x_interval = 30 * day_sec
+                    date_fmt = "%Y/%m"
+                elif duration <= 365 * 3 * day_sec: # 3年以内 -> 3ヶ月ごと
+                    x_interval = 90 * day_sec
+                    date_fmt = "%Y/%m"
+                else: # それ以上 -> 1年(365日)ごと
+                    x_interval = 365 * day_sec
+                    date_fmt = "%Y"
+
+                # 縦グリッド線 (薄い灰色)
+                chart.vertical_grid_lines = ft.ChartGridLines(
+                    interval=x_interval,
+                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
+                    width=1
+                )
+
+                # X軸ラベル生成
                 labels = []
-                curr_ts = min_x
-                while curr_ts <= max_x + 1:
-                    dt_obj = datetime.fromtimestamp(curr_ts)
-                    labels.append(ft.ChartAxisLabel(value=curr_ts, label=ft.Text(dt_obj.strftime("%m/%d"), size=10, weight="bold")))
-                    curr_ts += interval
+                # 相対座標(0スタート)でラベルを配置
+                curr_rel_x = 0
+                while curr_rel_x <= (max_x - min_x):
+                    # 表示用テキストは絶対時刻(min_x + rel_x)に戻して生成
+                    dt_obj = datetime.fromtimestamp(min_x + curr_rel_x)
+                    labels.append(ft.ChartAxisLabel(value=curr_rel_x, label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")))
+                    curr_rel_x += x_interval
+
                 chart.bottom_axis.labels = labels
+                chart.bottom_axis.labels_interval = x_interval
+
+                # 横グリッド線 (薄い灰色) - 計算済みのy_intervalを使用
+                chart.horizontal_grid_lines = ft.ChartGridLines(
+                    interval=y_interval,
+                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
+                    width=1
+                )
+                # 左軸ラベルの間隔も合わせる
+                chart.left_axis.labels_interval = y_interval
 
                 # サマリー表示 (Max/Min/Current)
                 summary_col.controls.clear()
@@ -618,12 +678,20 @@ async def main(page: ft.Page):
                                  tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900))
             summary_col = ft.Column()
 
+            async def close_timeline(e):
+                timeline_dialog.open = False
+                page.update()
+                await asyncio.sleep(0.1)
+                if timeline_dialog in page.overlay:
+                    page.overlay.remove(timeline_dialog)
+                    page.update()
+
             timeline_dialog = ft.AlertDialog(
                 title=ft.Text("推移グラフ"),
                 content=ft.Container(width=700, height=500, content=ft.Column([
                     ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER),
                     summary_col, ft.Container(chart, expand=True, padding=10)])),
-                actions=[ft.TextButton("閉じる", on_click=lambda e: page.overlay.remove(timeline_dialog) or page.update())]
+                actions=[ft.TextButton("閉じる", on_click=close_timeline)]
             )
             page.overlay.append(timeline_dialog); timeline_dialog.open = True; update_graph(); page.update()
 
