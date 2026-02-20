@@ -127,8 +127,8 @@ async def main(page: ft.Page):
     current_task = None
 
     page.title = "test"
-    page.window_width = 400
-    page.window_height = 700
+    page.window.width = 400
+    page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
 
     # 起動時の読み込みメッセージを表示
@@ -474,6 +474,159 @@ async def main(page: ft.Page):
             report_dialog.open = True
             page.update()
 
+        # --- Timeline (推移グラフ) を表示する関数 ---
+        async def open_timeline_dialog(e):
+            if not filtered_data_rows:
+                return
+
+            # 1. データを日付順にソート
+            sorted_rows = sorted(filtered_data_rows, key=lambda x: x[0])
+
+            # 2. 日付ごとに集計
+            daily_summary = {} 
+            for row in sorted_rows:
+                d = row[0]
+                mode = row[1]
+                val = float(row[2]) if row[2] else 0
+                if d not in daily_summary:
+                    daily_summary[d] = {"income": 0, "expense": 0}
+                if mode == "Income":
+                    daily_summary[d]["income"] += val
+                elif mode == "Expense":
+                    daily_summary[d]["expense"] += val
+
+            # 3. 累積データを計算
+            dates = sorted(daily_summary.keys())
+            
+            # データポイント作成
+            data_inc, data_exp, data_bal = [], [], []
+            cum_inc, cum_exp, cum_bal = 0, 0, 0
+            
+            # タイムスタンプ変換用
+            def to_ts(date_str):
+                return datetime.strptime(date_str, "%Y-%m-%d").timestamp()
+
+            min_x = to_ts(dates[0])
+            max_x = to_ts(dates[-1])
+            
+            # 1日分の秒数
+            day_seconds = 24 * 60 * 60
+            # 期間が短すぎる場合の調整
+            if max_x == min_x:
+                max_x += day_seconds
+
+            for d in dates:
+                inc = daily_summary[d]["income"]
+                exp = daily_summary[d]["expense"]
+                
+                cum_inc += inc
+                cum_exp += abs(exp) # 支出は絶対値
+                cum_bal += (inc + exp)
+                
+                ts = to_ts(d)
+                
+                # ツールチップに日付と金額を表示
+                data_inc.append(ft.LineChartDataPoint(ts, cum_inc, tooltip=f"{d}\nInc: ¥{cum_inc:,.0f}"))
+                data_exp.append(ft.LineChartDataPoint(ts, cum_exp, tooltip=f"{d}\nExp: ¥{cum_exp:,.0f}"))
+                data_bal.append(ft.LineChartDataPoint(ts, cum_bal, tooltip=f"{d}\nBal: ¥{cum_bal:,.0f}"))
+
+            # 4. 表示切り替え用のステート
+            show_inc = True
+            show_exp = True
+            show_bal = True
+
+            # 5. グラフ更新関数
+            def update_graph(e=None):
+                nonlocal show_inc, show_exp, show_bal
+                
+                if e:
+                    if e.control.data == "inc": show_inc = not show_inc
+                    if e.control.data == "exp": show_exp = not show_exp
+                    if e.control.data == "bal": show_bal = not show_bal
+
+                # ボタンの見た目更新
+                btn_inc.icon = ft.Icons.CHECK_BOX if show_inc else ft.Icons.CHECK_BOX_OUTLINE_BLANK
+                btn_inc.style = ft.ButtonStyle(color=ft.Colors.GREEN if show_inc else ft.Colors.GREY)
+                
+                btn_exp.icon = ft.Icons.CHECK_BOX if show_exp else ft.Icons.CHECK_BOX_OUTLINE_BLANK
+                btn_exp.style = ft.ButtonStyle(color=ft.Colors.RED if show_exp else ft.Colors.GREY)
+                
+                btn_bal.icon = ft.Icons.CHECK_BOX if show_bal else ft.Icons.CHECK_BOX_OUTLINE_BLANK
+                btn_bal.style = ft.ButtonStyle(color=ft.Colors.CYAN if show_bal else ft.Colors.GREY)
+
+                line_series = []
+                all_visible_points = []
+
+                if show_inc and data_inc:
+                    line_series.append(ft.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
+                    all_visible_points.extend(data_inc)
+                if show_exp and data_exp:
+                    line_series.append(ft.LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
+                    all_visible_points.extend(data_exp)
+                if show_bal and data_bal:
+                    line_series.append(ft.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+                    all_visible_points.extend(data_bal)
+
+                # Y軸範囲計算
+                if all_visible_points:
+                    vals = [p.y for p in all_visible_points]
+                    min_y, max_y = min(vals), max(vals)
+                    margin = (max_y - min_y) * 0.1 if max_y != min_y else 100
+                    chart.min_y = min_y - margin
+                    chart.max_y = max_y + margin
+                else:
+                    chart.min_y, chart.max_y = 0, 100
+
+                chart.data_series = line_series
+                chart.min_x = min_x
+                chart.max_x = max_x
+
+                # X軸ラベル生成 (日付表示)
+                interval = (max_x - min_x) / 4 if max_x != min_x else day_seconds
+                labels = []
+                curr_ts = min_x
+                while curr_ts <= max_x + 1:
+                    dt_obj = datetime.fromtimestamp(curr_ts)
+                    labels.append(ft.ChartAxisLabel(value=curr_ts, label=ft.Text(dt_obj.strftime("%m/%d"), size=10, weight="bold")))
+                    curr_ts += interval
+                chart.bottom_axis.labels = labels
+
+                # サマリー表示 (Max/Min/Current)
+                summary_col.controls.clear()
+                def make_summary(label, data, color):
+                    if not data: return None
+                    vals = [p.y for p in data]
+                    return ft.Row([
+                        ft.Text(f"{label}: ", color=color, weight="bold"),
+                        ft.Text(f"Current ¥{vals[-1]:,.0f} / Max ¥{max(vals):,.0f} / Min ¥{min(vals):,.0f}", size=12)
+                    ], spacing=5)
+
+                if show_inc: summary_col.controls.append(make_summary("Income", data_inc, ft.Colors.GREEN))
+                if show_exp: summary_col.controls.append(make_summary("Expense", data_exp, ft.Colors.RED))
+                if show_bal: summary_col.controls.append(make_summary("Balance", data_bal, ft.Colors.CYAN))
+
+                if e:
+                    timeline_dialog.update()
+
+            # UI部品
+            btn_inc = ft.TextButton("Income", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
+            btn_exp = ft.TextButton("Expense", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
+            btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
+            
+            chart = ft.LineChart(expand=True, border=ft.border.all(1, ft.Colors.GREY_800),
+                                 left_axis=ft.ChartAxis(labels_size=40), bottom_axis=ft.ChartAxis(labels_size=32),
+                                 tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900))
+            summary_col = ft.Column()
+
+            timeline_dialog = ft.AlertDialog(
+                title=ft.Text("推移グラフ"),
+                content=ft.Container(width=700, height=500, content=ft.Column([
+                    ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER),
+                    summary_col, ft.Container(chart, expand=True, padding=10)])),
+                actions=[ft.TextButton("閉じる", on_click=lambda e: page.overlay.remove(timeline_dialog) or page.update())]
+            )
+            page.overlay.append(timeline_dialog); timeline_dialog.open = True; update_graph(); page.update()
+
         #検索窓呼び出しアイコン,詳細レポート呼び出しアイコンを描画
         page.add(
             ft.Row(
@@ -497,6 +650,7 @@ async def main(page: ft.Page):
                     ft.IconButton(
                         icon=ft.Icons.SHOW_CHART, 
                         icon_size=25, 
+                        on_click=open_timeline_dialog,
                         tooltip="推移を表示" 
                     ),
                     ft.Text("←timeline", size=10, weight="bold"),
