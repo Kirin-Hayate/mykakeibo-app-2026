@@ -661,8 +661,6 @@ async def main(page: ft.Page):
                         ft.Text(f"Current ¥{vals[-1]:,.0f} / Max ¥{max(vals):,.0f} / Min ¥{min(vals):,.0f}", size=12)
                     ], spacing=5)
 
-                if show_inc: summary_col.controls.append(make_summary("Income", data_inc, ft.Colors.GREEN))
-                if show_exp: summary_col.controls.append(make_summary("Expense", data_exp, ft.Colors.RED))
                 if show_bal: summary_col.controls.append(make_summary("Balance", data_bal, ft.Colors.CYAN))
 
                 if e:
