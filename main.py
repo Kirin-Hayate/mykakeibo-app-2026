@@ -894,6 +894,44 @@ async def main(page: ft.Page):
                 await asyncio.to_thread(UpdateOrDeleteSheet, row_data[6], mode="DELETE")
                 await refresh_view()
 
+            # 「複製保存」を押したときの処理
+            async def on_duplicate(e):
+                dialog.open = False
+                page.update() 
+                page.overlay.remove(edit_date_picker) # DatePickerのお片付け
+                page.update()
+                await asyncio.sleep(0.1) # アニメーション完了待ち
+
+                # オーバーレイからダイアログとDatePickerを完全に削除
+                if edit_date_picker in page.overlay:
+                    page.overlay.remove(edit_date_picker)
+                if dialog in page.overlay:
+                    page.overlay.remove(dialog)
+                page.update()
+
+                # 画面をクリアして「保存中」を表示
+                page.clean()
+                page.add(ft.Text("My家計簿", size=20), choice_segment)
+                page.add(ft.Text("データを複製保存中...", color="orange", size=16))
+                page.update()
+
+                # 新しい金額を計算
+                try:
+                    val = float(edit_amount.value)
+                except ValueError:
+                    val = 0.0
+                new_kingaku = val * (-1 if current_edit_mode == "Expense" else 1)
+                
+                # 新しいUUIDを生成
+                new_id = str(uuid.uuid4())
+                timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+                # 新規レコード作成
+                new_record = [current_edit_date, current_edit_mode, new_kingaku, current_edit_category, edit_content.value, timestamp, new_id]
+                
+                await asyncio.to_thread(Kakikomi, new_record)
+                await refresh_view()
+
             async def close_edit_dialog(e):
                 dialog.open = False
                 page.overlay.remove(edit_date_picker) # DatePickerのお片付け
@@ -911,7 +949,14 @@ async def main(page: ft.Page):
             status_right = ft.Text("", weight="bold", size=12)
 
             dialog = ft.AlertDialog(
-                title=ft.Text("Edit/Delete"),
+                title=ft.Row([
+                    ft.Text("Edit/Delete"),
+                    ft.IconButton(
+                        icon=ft.Icons.ADD_CIRCLE_OUTLINE, 
+                        tooltip="この内容で新規作成(複製)", 
+                        on_click=on_duplicate
+                    )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 content=ft.Column([
                     ft.Text("日付", size=12, color="grey500"),
                     edit_date_button,
