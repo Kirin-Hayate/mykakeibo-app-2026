@@ -500,7 +500,7 @@ async def main(page: ft.Page):
             dates = sorted(daily_summary.keys())
             
             # データポイント作成
-            data_inc, data_exp, data_bal = [], [], []
+            data_inc, data_exp, data_bal ,data_date = [], [], [], []
             cum_inc, cum_exp, cum_bal = 0, 0, 0
             
             # タイムスタンプ変換用
@@ -528,11 +528,13 @@ async def main(page: ft.Page):
                 rel_x = ts - min_x # 開始日を0とする相対座標に変換
                 
                 # ツールチップに日付と金額を表示
-                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"{d}\nInc: ¥{cum_inc:,.0f}"))
-                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"{d}\nExp: ¥{cum_exp:,.0f}"))
-                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{d}\nBal: ¥{cum_bal:,.0f}"))
+                data_date.append(ft.LineChartDataPoint(rel_x, ts, tooltip=d))
+                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}(+{inc:,.0f})"))
+                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}(-{abs(exp):,.0f})"))
+                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}({inc + exp:,.0f})"))
 
             # 4. 表示切り替え用のステート
+            show_date = True
             show_inc = True
             show_exp = True
             show_bal = True
@@ -557,7 +559,11 @@ async def main(page: ft.Page):
                 btn_bal.style = ft.ButtonStyle(color=ft.Colors.CYAN if show_bal else ft.Colors.GREY)
 
                 line_series = []
+                data_data = []
                 all_visible_points = []
+
+                line_series.append(ft.LineChartData(data_data, color=ft.Colors.WHITE, stroke_width=3))
+                all_visible_points.extend(data_data)
 
                 if show_inc and data_inc:
                     line_series.append(ft.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
