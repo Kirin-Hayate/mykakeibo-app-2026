@@ -255,6 +255,29 @@ async def main(page: ft.Page):
         settings_dialog.open = True
         page.update()
 
+    # --- 簡易電卓機能 ---
+    calc_input = ft.TextField(label="計算欄", hint_text="例: 1170 * (40/60)", expand=True, text_size=14)
+    calc_result = ft.TextField(label="計算結果", read_only=True, value="", text_size=14)
+
+    def on_calculate(e):
+        try:
+            if not calc_input.value:
+                return
+            # Pythonの記法で計算
+            result = eval(calc_input.value, {"__builtins__": None}, {})
+            
+            # 整数なら.0を表示しない
+            if isinstance(result, (int, float)):
+                if result == int(result):
+                    result = int(result)
+            
+            calc_result.value = str(result)
+        except Exception:
+            calc_result.value = "Error"
+        page.update()
+
+    calc_button = ft.ElevatedButton("計算", on_click=on_calculate)
+
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
     async def make_recordingpage():
         nonlocal status_label
@@ -279,7 +302,11 @@ async def main(page: ft.Page):
                 save_button,
                 settings_button
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            status_label
+            status_label,
+            
+            ft.Text("簡易電卓", size=12, color="grey500"),
+            ft.Row([calc_input, calc_button], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            calc_result
         )
     
     #画面に部品を追加(Analysisにおけるレイアウトの指定)
