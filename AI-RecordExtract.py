@@ -18,7 +18,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 # 設定
-IMAGE_FOLDER = 
+IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2024-04"
 MODEL_NAME = "gemini-2.5-flash-lite"
 
 # カテゴリ定義
