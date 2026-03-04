@@ -30,7 +30,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- 設定 ---
 PROJECT_ID = "kakeibofrom202602032126"
 LOCATION = "us-central1" 
-IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2024"
+IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2025"
 # 移行済みのフォルダ名
 PROCESSED_DIR_NAME = "移行済記録"
 
@@ -45,10 +45,10 @@ INCOME_CATEGORIES = ["FreeStep", "お小遣い", "その他", "SYC","Wagner", "N
 
 PROMPT = f"""
 提供された画像を読み取り、家計簿データとして抽出してください。
-以下のフォーマットに従い、コンマ(,)で区切りで1行だけ出力してください。
+以下のフォーマットに従い、|で区切りで1行だけ出力してください。
 
 出力フォーマット:
-日付,モード,金額,カテゴリ,内容
+日付|モード|金額|カテゴリ|内容
 
 制約:
 1. 日付: YYYY-MM-DD形式。
@@ -61,7 +61,7 @@ PROMPT = f"""
    - Income: {", ".join(INCOME_CATEGORIES)}
 5. 内容: メモ等。
 
-※重要: 「FreeStep誤差脱漏」の場合は、Incomeモード、FreeStepカテゴリ、負の金額で出力。
+※重要: 「FreeStep誤差脱漏」の場合は、Incomeモード、FreeStepカテゴリ、負の金額で出力。内容欄に「Freestep誤差脱漏」と追加で記載する
 """
 
 
@@ -110,7 +110,7 @@ def main():
             text = response.text.strip().replace("'", "")
             
             # CSV/スプシ用整形
-            record_list = [item.strip() for item in text.split(',')]
+            record_list = [item.strip() for item in text.split('|')]
             record_list.append(datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
             record_list.append(str(uuid.uuid4()))
 
