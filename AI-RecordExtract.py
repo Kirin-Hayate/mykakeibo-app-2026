@@ -39,17 +39,17 @@ def Kakikomi(record):
 
 # 1. .envからAPIキーを読み込む
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY_2")
 
 if not api_key:
-    print("【エラー】.envファイルからGEMINI_API_KEYが見つかりません。")
+    print("【エラー】.envファイルからGEMINI_API_KEY_2が見つかりません。")
     exit()
 
 # 2. クライアントの初期化
 client = genai.Client(api_key=api_key)
 
 # 設定
-IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2024-04"
+IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2024"
 MODEL_NAME = "gemini-2.5-flash-lite"
 
 # カテゴリ定義
@@ -79,6 +79,8 @@ PROMPT = f"""
    - Expense: {", ".join(EXPENSE_CATEGORIES)}
    - Income: {", ".join(INCOME_CATEGORIES)}
 5. 内容: 画像内のメモや品目。内容がない場合は空欄とする。
+ただし、カテゴリが「Freestep誤差脱漏」の場合は、その金額をIncomeモードで記録してください。
+たとえば、FreeStep誤差脱漏カテゴリの1000円の支出は、IncomeモードでFreeStepカテゴリの負の収入-1000として記録すること。
 
 画像から読み取れない場合は、文脈から推測するか、不明としてください。
 """
@@ -154,4 +156,6 @@ def main():
                     break # その他のエラーはスキップ
 
 if __name__ == "__main__":
+    start=time.time()
     main()
+    print(f"処理時間合計: {time.time()-start}s")
