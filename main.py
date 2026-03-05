@@ -44,10 +44,11 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
-    sheet = client.open("spreadsheet_key").sheet1
+    sheet = client.open(spreadsheet_key).worksheet("Recordings")
     
     # 1. G列(UUIDの列)を全部取得して、何行目にあるか探す
     uuid_list = sheet.col_values(7) # 7列目(G列)
+
     try:
         # スプシは1行目が見出しなので index+1 行目
         row_index = uuid_list.index(target_uuid) + 1
@@ -68,7 +69,7 @@ def Yomikomi():
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key 
-    sheet = client.open(SHEET_NAME).sheet1
+    sheet = client.open(SHEET_NAME).worksheet("Recordings")
     
     # 全データを取得（1行目は見出しと想定）
     data = sheet.get_all_values()
@@ -224,6 +225,7 @@ async def main(page: ft.Page):
                 # スプシに保存
                 await asyncio.to_thread(SaveCategories, options_expense_list, options_income_list)
                 await render_cat_list()
+                page.update()
 
         async def delete_category(e):
             cat_name = e.control.data
@@ -232,6 +234,7 @@ async def main(page: ft.Page):
                 # スプシに保存
                 await asyncio.to_thread(SaveCategories, options_expense_list, options_income_list)
                 await render_cat_list()
+                page.update()
 
         async def close_settings_dialog(e):
             settings_dialog.open = False
@@ -239,7 +242,8 @@ async def main(page: ft.Page):
             await asyncio.sleep(0.1)
             page.overlay.remove(settings_dialog)
             page.update()
-            await refresh_view() # 画面更新してチップに反映
+            await refresh_view()
+            page.update() # 画面更新してチップに反映
 
         settings_dialog = ft.AlertDialog(
             title=ft.Text(f"{current_mode} カテゴリ編集"),
