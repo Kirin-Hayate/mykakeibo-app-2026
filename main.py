@@ -6,6 +6,14 @@ import asyncio
 from datetime import timedelta
 import uuid
 import math
+import os
+from dotenv import load_dotenv
+
+# .envファイルを読み込む
+load_dotenv()
+# 変数名（Key）を指定して値を取得
+spreadsheet_key = os.getenv("MYKAKEIBO_SPREADSHEET_NAME")
+
 
 #スプシへの書き込みを行う関数 Kakikomi()
 def Kakikomi(record):
@@ -20,7 +28,7 @@ def Kakikomi(record):
     #authorize: 通行証をGoogleのサーバーに提示し、操作を許可してもらいます。
     client = gspread.authorize(creds)
     #open: インターネット上にある膨大なファイルの中から、名前を頼りに特定のシートを見つけて接続を確立します。
-    SHEET_NAME = "家計簿テストver202602032139" 
+    SHEET_NAME = spreadsheet_key 
     sheet = client.open(SHEET_NAME).worksheet("Recordings")
 
     # 3. 操作フェーズ（「命令」を送る）
@@ -36,7 +44,7 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
-    sheet = client.open("家計簿テストver202602032139").sheet1
+    sheet = client.open("spreadsheet_key").sheet1
     
     # 1. G列(UUIDの列)を全部取得して、何行目にあるか探す
     uuid_list = sheet.col_values(7) # 7列目(G列)
@@ -59,7 +67,7 @@ def Yomikomi():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
-    SHEET_NAME = "家計簿テストver202602032139" 
+    SHEET_NAME = spreadsheet_key 
     sheet = client.open(SHEET_NAME).sheet1
     
     # 全データを取得（1行目は見出しと想定）
@@ -71,12 +79,12 @@ def LoadCategories():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
-    SHEET_NAME = "家計簿テストver202602032139"
+    SHEET_NAME = spreadsheet_key
     
     try:
         creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
         client = gspread.authorize(creds)
-        SHEET_NAME = "家計簿テストver202602032139"
+        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
         # 1列目(Expense)と2列目(Income)を取得（1行目は見出しなので除外）
         expense_list = [x for x in sheet.col_values(1)[1:] if x] # 空文字除去
@@ -94,12 +102,12 @@ def SaveCategories(expense_list, income_list):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
     client = gspread.authorize(creds)
-    SHEET_NAME = "家計簿テストver202602032139"
+    SHEET_NAME = spreadsheet_key
     
     try:
         creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
         client = gspread.authorize(creds)
-        SHEET_NAME = "家計簿テストver202602032139"
+        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
         
         # データを作成（見出し + データ）
