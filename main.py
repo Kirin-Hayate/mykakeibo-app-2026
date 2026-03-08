@@ -8,6 +8,18 @@ import uuid
 import math
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+
+# 1. このプログラム本体 (main.py) が置いてあるフォルダの絶対パスを特定する
+BASE_DIR = Path(__file__).parent
+
+# 2. 各ファイルへの「確実な住所」を作成する
+JSON_KEY_PATH = BASE_DIR / "秘密鍵-kakeibofrom202602032126.json"
+ENV_PATH = BASE_DIR / ".env"
+
+# .env の読み込みもこれに合わせると確実です
+load_dotenv(dotenv_path=ENV_PATH)
+
 
 # .envファイルを読み込む
 load_dotenv()
@@ -21,7 +33,7 @@ def Kakikomi(record):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
     #creds: ~.json（秘密鍵）を読み込み、「私は許可されたプログラムです」というデジタルな通行証を作成しています。
-    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope) # ここにファイル名
+    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope) # ここにファイル名
 
     # 2. 接続フェーズ（「扉」を開ける）
     #authorize: 通行証をGoogleのサーバーに提示し、操作を許可してもらいます。
@@ -41,7 +53,7 @@ def Kakikomi(record):
 # 特定のUUIDを持つ行を探して更新・削除する関数
 def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
     client = gspread.authorize(creds)
     sheet = client.open(spreadsheet_key).worksheet("Recordings")
     
@@ -65,7 +77,7 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
 #戻り値dataは、リスト[['日付', 'モード', '金額', 'カテゴリ', '内容', '記録した日時','UUID'], ...]
 def Yomikomi():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key 
     sheet = client.open(SHEET_NAME).worksheet("Recordings")
@@ -77,12 +89,12 @@ def Yomikomi():
 # カテゴリ設定を読み込む関数 LoadCategories()
 def LoadCategories():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
         client = gspread.authorize(creds)
         SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
@@ -100,12 +112,12 @@ def LoadCategories():
 # カテゴリ設定を保存する関数 SaveCategories()
 def SaveCategories(expense_list, income_list):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name('秘密鍵-kakeibofrom202602032126.json', scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH).json, scope)
         client = gspread.authorize(creds)
         SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
@@ -136,7 +148,7 @@ async def main(page: ft.Page):
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
-    page.title = "MyKAKEIBO ver.202603082352"
+    page.title = "MyKAKEIBO ver.202603090018"
     page.window.width = 400
     page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
