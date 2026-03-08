@@ -14,7 +14,6 @@ load_dotenv()
 # 変数名（Key）を指定して値を取得
 spreadsheet_key = os.getenv("MYKAKEIBO_SPREADSHEET_NAME")
 
-
 #スプシへの書き込みを行う関数 Kakikomi()
 def Kakikomi(record):
     # 1.認証フェーズ（「通行証」の準備）ーーーーーーーーーーーーーーーーー
@@ -133,6 +132,7 @@ def SaveCategories(expense_list, income_list):
 
 #ページを駆動する部分
 async def main(page: ft.Page):
+    print(spreadsheet_key)
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
@@ -202,8 +202,8 @@ async def main(page: ft.Page):
 
         async def render_cat_list():
             cat_list_col.controls.clear()
-            # リストをソートして表示
-            for cat in sorted(target_list):
+            # リストをスプレッドシートの順序（リストの順序）で表示
+            for cat in target_list:
                 cat_list_col.controls.append(
                     ft.Row([
                         ft.Text(cat, expand=True),
@@ -567,10 +567,12 @@ async def main(page: ft.Page):
                 rel_x = ts - min_x # 開始日を0とする相対座標に変換
                 
                 # ツールチップに日付と金額を表示
-                data_date.append(ft.LineChartDataPoint(rel_x, ts, tooltip=d))
-                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}(+{inc:,.0f})"))
-                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}(-{abs(exp):,.0f})"))
-                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}({inc + exp:,.0f})"))
+                # tooltip プロパティに直接文字列を入れるのではなく、
+                # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
+                data_date.append(ft.LineChartDataPoint(rel_x, ts, tooltip=f"{d}"))
+                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
+                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
+                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f}"))
 
             # 4. 表示切り替え用のステート
             show_date = True
