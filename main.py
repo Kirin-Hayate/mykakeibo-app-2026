@@ -144,11 +144,21 @@ def SaveCategories(expense_list, income_list):
 
 #ページを駆動する部分
 async def main(page: ft.Page):
+
+    from pathlib import Path
+    
+    # 画像ファイルへの絶対パスを作る
+    BASE_DIR = Path(__file__).parent
+    ICON_PATH = BASE_DIR / "Icon_2026-03-09-000233.ico" # 用意した画像の名前に合わせてください
+    
+    if ICON_PATH.exists():
+        page.window.icon = str(ICON_PATH) # タスクバーのアイコンを変更
     print(spreadsheet_key)
+
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
-    page.title = "MyKAKEIBO ver.202603090018"
+    page.title = "MyKAKEIBO ver.202603090029"
     page.window.width = 400
     page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
