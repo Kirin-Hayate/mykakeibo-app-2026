@@ -136,7 +136,7 @@ async def main(page: ft.Page):
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
-    page.title = "test"
+    page.title = "MyKAKEIBO ver.202603082352"
     page.window.width = 400
     page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
@@ -569,15 +569,14 @@ async def main(page: ft.Page):
                 # ツールチップに日付と金額を表示
                 # tooltip プロパティに直接文字列を入れるのではなく、
                 # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
-                data_date.append(ft.LineChartDataPoint(rel_x, ts, tooltip=f"{d}"))
                 data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
                 data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
-                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f}"))
+                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
 
             # 4. 表示切り替え用のステート
             show_date = True
-            show_inc = True
-            show_exp = True
+            show_inc = False
+            show_exp = False
             show_bal = True
 
             # 5. グラフ更新関数
@@ -600,11 +599,7 @@ async def main(page: ft.Page):
                 btn_bal.style = ft.ButtonStyle(color=ft.Colors.CYAN if show_bal else ft.Colors.GREY)
 
                 line_series = []
-                data_data = []
                 all_visible_points = []
-
-                line_series.append(ft.LineChartData(data_data, color=ft.Colors.WHITE, stroke_width=3))
-                all_visible_points.extend(data_data)
 
                 if show_inc and data_inc:
                     line_series.append(ft.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
@@ -720,7 +715,8 @@ async def main(page: ft.Page):
             
             chart = ft.LineChart(expand=True, border=ft.border.all(1, ft.Colors.GREY_800),
                                  left_axis=ft.ChartAxis(labels_size=40), bottom_axis=ft.ChartAxis(labels_size=32),
-                                 tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900))
+                                 tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
+                                )
             summary_col = ft.Column()
 
             async def close_timeline(e):
