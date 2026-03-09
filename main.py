@@ -1,29 +1,21 @@
+import os
 import flet as ft
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
-from datetime import timedelta
 import uuid
 import math
-import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-# 1. このプログラム本体 (main.py) が置いてあるフォルダの絶対パスを特定する
+# --- プログラム全体の基準パスを1回だけ定義 ---
 BASE_DIR = Path(__file__).parent
-
-# 2. 各ファイルへの「確実な住所」を作成する
 JSON_KEY_PATH = BASE_DIR / "秘密鍵-kakeibofrom202602032126.json"
 ENV_PATH = BASE_DIR / ".env"
 
-# .env の読み込みもこれに合わせると確実です
+# --- .env の読み込みも1回にまとめる ---
 load_dotenv(dotenv_path=ENV_PATH)
-
-
-# .envファイルを読み込む
-load_dotenv()
-# 変数名（Key）を指定して値を取得
 spreadsheet_key = os.getenv("MYKAKEIBO_SPREADSHEET_NAME")
 
 #スプシへの書き込みを行う関数 Kakikomi()
@@ -147,13 +139,12 @@ async def main(page: ft.Page):
 
     from pathlib import Path
     
-    # 画像ファイルへの絶対パスを作る
-    BASE_DIR = Path(__file__).parent
-    ICON_PATH = BASE_DIR / "Icon_2026-03-09-000233.ico" # 用意した画像の名前に合わせてください
+    #画像ファイルへの絶対パスを作る
+    #BASE_DIR = Path(__file__).parent
+    #ICON_PATH = BASE_DIR / "Icon_2026-03-09-000233.ico" # 用意した画像の名前に合わせてください
     
-    if ICON_PATH.exists():
-        page.window.icon = str(ICON_PATH) # タスクバーのアイコンを変更
-    print(spreadsheet_key)
+    #if ICON_PATH.exists():
+    #    page.window.icon = str(ICON_PATH) # タスクバーのアイコンを変更
 
     # 現在実行中のメインタスクを保持する変数
     current_task = None
@@ -170,7 +161,7 @@ async def main(page: ft.Page):
         ft.Column(
             [
                 ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Icon(name=ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
+                ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
                 ft.Text("設定を読み込み中...", size=16, color=ft.Colors.ORANGE),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
@@ -310,7 +301,7 @@ async def main(page: ft.Page):
             calc_result.value = "Error"
         page.update()
 
-    calc_button = ft.ElevatedButton("計算", on_click=on_calculate)
+    calc_button = ft.Button("計算", on_click=on_calculate)
 
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
     async def make_recordingpage():
@@ -735,7 +726,7 @@ async def main(page: ft.Page):
             btn_exp = ft.TextButton("Expense", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
             btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
             
-            chart = ft.LineChart(expand=True, border=ft.border.all(1, ft.Colors.GREY_800),
+            chart = ft.LineChart(expand=True, border=ft.Border.all(1, ft.Colors.GREY_800),
                                  left_axis=ft.ChartAxis(labels_size=40), bottom_axis=ft.ChartAxis(labels_size=32),
                                  tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
                                 )
@@ -886,7 +877,7 @@ async def main(page: ft.Page):
                 edit_date_picker.open = True
                 page.update()
 
-            edit_date_button = ft.ElevatedButton(
+            edit_date_button = ft.Button(
                 text=f"日付: {current_edit_date}",
                 icon=ft.Icons.CALENDAR_MONTH,
                 on_click=open_edit_date_picker
@@ -1125,7 +1116,7 @@ async def main(page: ft.Page):
                 cat_selector_dialog.open = True
                 page.update()
 
-            cat_select_btn = ft.ElevatedButton("選択", on_click=open_cat_selector, height=30, style=ft.ButtonStyle(padding=5))
+            cat_select_btn = ft.Button("選択", on_click=open_cat_selector, height=30, style=ft.ButtonStyle(padding=5))
 
             # 直接入力：キーワード
             keyword_tf = ft.TextField(label="keyword", expand=True, text_size=12,value=page.filter_query[2])
@@ -1338,7 +1329,7 @@ async def main(page: ft.Page):
                 padding=10,
                 bgcolor=ft.Colors.GREY_900,
                 border_radius=10,
-                border=ft.border.all(1, "grey800"),
+                border=ft.Border.all(1, "grey800"),
             )
 
             # 画面に追加
@@ -1657,4 +1648,4 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
-ft.app(target=main)
+ft.run(main)
