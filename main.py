@@ -10,6 +10,7 @@ import math
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+import json
 
 # 1. このプログラム本体 (main.py) が置いてあるフォルダの絶対パスを特定する
 BASE_DIR = Path(__file__).parent
@@ -27,6 +28,23 @@ load_dotenv()
 # 変数名（Key）を指定して値を取得
 spreadsheet_key = os.getenv("MYKAKEIBO_SPREADSHEET_NAME")
 
+#Web公開に向けて、鍵は「ファイルがあればファイルから、なければ環境変数から読み込む」という仕組みにしたい
+def get_creds():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    
+    # 1. 環境変数をチェック（Web公開用）
+    env_creds = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    if env_creds:
+        # 文字列として保存されたJSONを辞書形式に変換して読み込む
+        creds_dict = json.loads(env_creds)
+        return ServiceAccountCredentials.from_json_dict(creds_dict, scope)
+    
+    # 2. 環境変数がなければローカルのファイルを探す（PC開発用）
+    if JSON_KEY_PATH.exists():
+        return ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    
+    raise Exception("認証情報が見つかりません。")
+
 #スプシへの書き込みを行う関数 Kakikomi()
 def Kakikomi(record):
     # 1.認証フェーズ（「通行証」の準備）ーーーーーーーーーーーーーーーーー
@@ -34,7 +52,7 @@ def Kakikomi(record):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
     #creds: ~.json（秘密鍵）を読み込み、「私は許可されたプログラムです」というデジタルな通行証を作成しています。
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope) # ここにファイル名
+    creds = get_creds()
 
     # 2. 接続フェーズ（「扉」を開ける）
     #authorize: 通行証をGoogleのサーバーに提示し、操作を許可してもらいます。
@@ -54,7 +72,7 @@ def Kakikomi(record):
 # 特定のUUIDを持つ行を探して更新・削除する関数
 def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     sheet = client.open(spreadsheet_key).worksheet("Recordings")
     
@@ -78,7 +96,7 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
 #戻り値dataは、リスト[['日付', 'モード', '金額', 'カテゴリ', '内容', '記録した日時','UUID'], ...]
 def Yomikomi():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key 
     sheet = client.open(SHEET_NAME).worksheet("Recordings")
@@ -90,14 +108,11 @@ def Yomikomi():
 # カテゴリ設定を読み込む関数 LoadCategories()
 def LoadCategories():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
-        client = gspread.authorize(creds)
-        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
         # 1列目(Expense)と2列目(Income)を取得（1行目は見出しなので除外）
         expense_list = [x for x in sheet.col_values(1)[1:] if x] # 空文字除去
@@ -113,14 +128,11 @@ def LoadCategories():
 # カテゴリ設定を保存する関数 SaveCategories()
 def SaveCategories(expense_list, income_list):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH).json, scope)
-        client = gspread.authorize(creds)
-        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
         
         # データを作成（見出し + データ）
@@ -1691,7 +1703,7 @@ async def main(page: ft.Page):
 if __name__ == "__main__":
     # 環境変数 "RENDER" がある（＝Webサーバー上）ならブラウザ、なければデスクトップ
     if os.getenv("RENDER"):
-        ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+        ft.run(main, view=ft.AppView.WEB_BROWSER)
     else:
         # PCで実行したときは今まで通りデスクトップアプリとして起動
         ft.run(main)
