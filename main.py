@@ -1,5 +1,5 @@
 import flet as ft
-from flet_charts import LineChart, LineChartData, LineChartDataPoint, PieChart, PieChartSection
+import flet_charts as fch
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -405,7 +405,7 @@ async def main(page: ft.Page):
                     
                     # グラフ用セクション（順位のみ表示）
                     sections.append(
-                        PieChartSection(
+                        fch.PieChartSection(
                             value=val,
                             title=str(rank),
                             color=color,
@@ -434,7 +434,7 @@ async def main(page: ft.Page):
 
                 # 半円にするための透明なダミーセクション（合計値と同じサイズ）
                 sections.append(
-                    PieChartSection(
+                    fch.PieChartSection(
                         value=total_val,
                         title="",
                         color=ft.Colors.TRANSPARENT,
@@ -445,7 +445,7 @@ async def main(page: ft.Page):
                 # チャートの構築
                 # start_degree_offset=180 で9時の位置から開始
                 # 時計回りにデータが配置され、下半分（透明）で円が閉じる
-                chart = PieChart(
+                chart = fch.PieChart(
                     sections=sections,
                     sections_space=0,
                     center_space_radius=40,
@@ -593,9 +593,9 @@ async def main(page: ft.Page):
                 # tooltip プロパティに直接文字列を入れるのではなく、
                 # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
                 # ft. を取って、インポートした LineChartDataPoint を直接使います
-                data_inc.append(LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
-                data_exp.append(LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
-                data_bal.append(LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
+                data_inc.append(fch.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
+                data_exp.append(fch.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
+                data_bal.append(fch.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
 
             # 4. 表示切り替え用のステート
             show_date = True
@@ -626,11 +626,14 @@ async def main(page: ft.Page):
                 all_visible_points = []
 
                 if show_inc and data_inc:
-                    line_series.append(LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
+                    line_series.append(fch.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
+                    all_visible_points.extend(data_inc) # 追加
                 if show_exp and data_exp:
-                    line_series.append(LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
+                    line_series.append(fch.LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
+                    all_visible_points.extend(data_exp) # 追加
                 if show_bal and data_bal:
-                    line_series.append(LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+                    line_series.append(fch.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+                    all_visible_points.extend(data_bal)
 
                 # --- Y軸（金額）の計算: キリのいい間隔にする ---
                 if all_visible_points:
@@ -686,7 +689,7 @@ async def main(page: ft.Page):
                     date_fmt = "%Y"
 
                 # 縦グリッド線 (薄い灰色)
-                chart.vertical_grid_lines = ft.ChartGridLines(
+                chart.vertical_grid_lines = fch.ChartGridLines(
                     interval=x_interval,
                     color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
                     width=1
@@ -699,14 +702,14 @@ async def main(page: ft.Page):
                 while curr_rel_x <= (max_x - min_x):
                     # 表示用テキストは絶対時刻(min_x + rel_x)に戻して生成
                     dt_obj = datetime.fromtimestamp(min_x + curr_rel_x)
-                    labels.append(ft.ChartAxisLabel(value=curr_rel_x, label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")))
+                    labels.append(fch.ChartAxisLabel(value=curr_rel_x, label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")))
                     curr_rel_x += x_interval
 
                 chart.bottom_axis.labels = labels
                 chart.bottom_axis.labels_interval = x_interval
 
                 # 横グリッド線 (薄い灰色) - 計算済みのy_intervalを使用
-                chart.horizontal_grid_lines = ft.ChartGridLines(
+                chart.horizontal_grid_lines = fch.ChartGridLines(
                     interval=y_interval,
                     color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
                     width=1
@@ -735,24 +738,24 @@ async def main(page: ft.Page):
             btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
 
             # UI部品の定義箇所
-            chart = LineChart(
+            chart = fch.LineChart(
                 expand=True,
-                border=ft.border.all(1, ft.Colors.GREY_800),
+                border=ft.Border.all(1, ft.Colors.GREY_800),
                 # 最新仕様では labels プロパティを省略せず、ChartAxis を直接設定
-                left_axis=ft.ChartAxis(
-                    labels_size=50,
+                left_axis=fch.ChartAxis(
+                    label_size=50,
                     title=ft.Text("金額 (¥)"),
                     title_size=20,
                 ),
-                bottom_axis=ft.ChartAxis(
-                    labels_size=40,
+                bottom_axis=fch.ChartAxis(
+                    label_size=40,
                     title=ft.Text("日付"),
                     title_size=20,
                 ),
-                tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
+                #tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
                 # グラフの余白を少し作ると見やすくなります
-                top_axis=ft.ChartAxis(visible=False),
-                right_axis=ft.ChartAxis(visible=False),
+                #top_axis=fch.ChartAxisLabel(visible=False),
+                #right_axis=fch.ChartAxisLabel(visible=False),
             )
             summary_col = ft.Column()
 
