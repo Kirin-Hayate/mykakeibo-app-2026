@@ -191,6 +191,10 @@ async def main(page: ft.Page):
         )
     )
     page.update()
+    
+    # ページのデフォルトパディングを設定
+    page.padding = 5
+    page.update()
 
     #モード切替(Expense/Income/Analysis)
     current_mode = "Expense"
@@ -1432,6 +1436,7 @@ async def main(page: ft.Page):
                 data_row_max_height=float("inf"),    # 行の最大高さ
                     heading_row_height=20,     # 見出し（ヘッダー）行の高さ
                     column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
+                    horizontal_margin=0, # DataTable自体の左右の余白をなくす
 
                     sort_column_index=sort_column_index,
                     sort_ascending=sort_ascending,
