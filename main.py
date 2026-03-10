@@ -1,10 +1,11 @@
 import flet as ft
+from flet_charts import LineChart, LineChartData, LineChartDataPoint, PieChart, PieChartSection
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import asyncio
 from datetime import timedelta
-import uuid
+import uuid # LineChartDataPoint のために追加
 import math
 import os
 from dotenv import load_dotenv
@@ -170,7 +171,7 @@ async def main(page: ft.Page):
         ft.Column(
             [
                 ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Icon(name=ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
+                ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
                 ft.Text("設定を読み込み中...", size=16, color=ft.Colors.ORANGE),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
@@ -309,8 +310,8 @@ async def main(page: ft.Page):
         except Exception:
             calc_result.value = "Error"
         page.update()
-
-    calc_button = ft.ElevatedButton("計算", on_click=on_calculate)
+    # DeprecationWarning: ElevatedButton is deprecated. Use Button instead.
+    calc_button = ft.Button("計算", on_click=on_calculate)
 
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
     async def make_recordingpage():
@@ -404,7 +405,7 @@ async def main(page: ft.Page):
                     
                     # グラフ用セクション（順位のみ表示）
                     sections.append(
-                        ft.PieChartSection(
+                        PieChartSection(
                             value=val,
                             title=str(rank),
                             color=color,
@@ -422,7 +423,7 @@ async def main(page: ft.Page):
                                     bgcolor=color,
                                     border_radius=10,
                                     width=16, height=16,
-                                    alignment=ft.alignment.center
+                                    alignment=ft.Alignment(0, 0)
                                 )),
                                 ft.DataCell(ft.Text(cat, size=12)),
                                 ft.DataCell(ft.Text(f"{percentage:.1f}%", size=12)),
@@ -433,7 +434,7 @@ async def main(page: ft.Page):
 
                 # 半円にするための透明なダミーセクション（合計値と同じサイズ）
                 sections.append(
-                    ft.PieChartSection(
+                    PieChartSection(
                         value=total_val,
                         title="",
                         color=ft.Colors.TRANSPARENT,
@@ -444,7 +445,7 @@ async def main(page: ft.Page):
                 # チャートの構築
                 # start_degree_offset=180 で9時の位置から開始
                 # 時計回りにデータが配置され、下半分（透明）で円が閉じる
-                chart = ft.PieChart(
+                chart = PieChart(
                     sections=sections,
                     sections_space=0,
                     center_space_radius=40,
@@ -461,11 +462,11 @@ async def main(page: ft.Page):
                                 ft.Text("Total", size=10, color="grey"),
                                 ft.Text(total_text, size=14, weight="bold", color=total_color)
                             ], alignment=ft.MainAxisAlignment.CENTER, spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            alignment=ft.alignment.center,
-                            padding=ft.padding.only(bottom=10) # 中心より少し上に配置
+                            alignment=ft.Alignment(0, 0),
+                            padding=ft.Padding.only(bottom=10) # 中心より少し上に配置
                         )
                     ],
-                    alignment=ft.alignment.center
+                    alignment=ft.Alignment(0, 0)
                 )
 
                 # テーブルの構築
@@ -488,9 +489,9 @@ async def main(page: ft.Page):
                     ft.Container(
                         chart_stack, 
                         height=180, # 円全体(直径180)が収まる高さを確保して描画崩れを防ぐ
-                        alignment=ft.alignment.center,
+                        alignment=ft.Alignment(0, 0),
                         # bottomのマイナスを減らして、下のテーブルとの間隔を確保（食い込み防止）
-                        margin=ft.margin.only(top=0, bottom=-70) 
+                        margin=ft.Margin.only(top=0, bottom=-70) 
                     ), 
                     table
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
@@ -591,9 +592,10 @@ async def main(page: ft.Page):
                 # ツールチップに日付と金額を表示
                 # tooltip プロパティに直接文字列を入れるのではなく、
                 # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
-                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
-                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
-                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
+                # ft. を取って、インポートした LineChartDataPoint を直接使います
+                data_inc.append(LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
+                data_exp.append(LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
+                data_bal.append(LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
 
             # 4. 表示切り替え用のステート
             show_date = True
@@ -624,14 +626,11 @@ async def main(page: ft.Page):
                 all_visible_points = []
 
                 if show_inc and data_inc:
-                    line_series.append(ft.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
-                    all_visible_points.extend(data_inc)
+                    line_series.append(LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
                 if show_exp and data_exp:
-                    line_series.append(ft.LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
-                    all_visible_points.extend(data_exp)
+                    line_series.append(LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
                 if show_bal and data_bal:
-                    line_series.append(ft.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
-                    all_visible_points.extend(data_bal)
+                    line_series.append(LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
 
                 # --- Y軸（金額）の計算: キリのいい間隔にする ---
                 if all_visible_points:
@@ -734,11 +733,27 @@ async def main(page: ft.Page):
             btn_inc = ft.TextButton("Income", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
             btn_exp = ft.TextButton("Expense", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
             btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
-            
-            chart = ft.LineChart(expand=True, border=ft.border.all(1, ft.Colors.GREY_800),
-                                 left_axis=ft.ChartAxis(labels_size=40), bottom_axis=ft.ChartAxis(labels_size=32),
-                                 tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
-                                )
+
+            # UI部品の定義箇所
+            chart = LineChart(
+                expand=True,
+                border=ft.border.all(1, ft.Colors.GREY_800),
+                # 最新仕様では labels プロパティを省略せず、ChartAxis を直接設定
+                left_axis=ft.ChartAxis(
+                    labels_size=50,
+                    title=ft.Text("金額 (¥)"),
+                    title_size=20,
+                ),
+                bottom_axis=ft.ChartAxis(
+                    labels_size=40,
+                    title=ft.Text("日付"),
+                    title_size=20,
+                ),
+                tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
+                # グラフの余白を少し作ると見やすくなります
+                top_axis=ft.ChartAxis(visible=False),
+                right_axis=ft.ChartAxis(visible=False),
+            )
             summary_col = ft.Column()
 
             async def close_timeline(e):
@@ -1338,7 +1353,7 @@ async def main(page: ft.Page):
                 padding=10,
                 bgcolor=ft.Colors.GREY_900,
                 border_radius=10,
-                border=ft.border.all(1, "grey800"),
+                border=ft.Border.all(1, "grey800"), # DeprecationWarning対応
             )
 
             # 画面に追加
@@ -1657,4 +1672,4 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
-ft.app(target=main)
+ft.run(main)
