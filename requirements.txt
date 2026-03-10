@@ -1,4 +1,5 @@
-flet>=0.25.0
+flet
+flet-charts
 gspread
 oauth2client
-datetime
+python-dotenv
