@@ -799,7 +799,7 @@ async def main(page: ft.Page):
                         on_click=lambda _: page.run_task(open_filter_dialog),
                         tooltip="絞り込み条件を開く" # ホバーした時に説明が出ます
                     ),
-                    ft.Text("←Filter", size=10, weight="bold"),
+                    ft.Text("Filter", size=10, weight="bold"),
 
                     ft.IconButton(
                         icon=ft.Icons.PIE_CHART, 
@@ -917,7 +917,7 @@ async def main(page: ft.Page):
                 edit_date_picker.open = True
                 page.update()
 
-            edit_date_button = ft.ElevatedButton(
+            edit_date_button = ft.Button(
                 text=f"日付: {current_edit_date}",
                 icon=ft.Icons.CALENDAR_MONTH,
                 on_click=open_edit_date_picker
@@ -1156,7 +1156,7 @@ async def main(page: ft.Page):
                 cat_selector_dialog.open = True
                 page.update()
 
-            cat_select_btn = ft.ElevatedButton("選択", on_click=open_cat_selector, height=30, style=ft.ButtonStyle(padding=5))
+            cat_select_btn = ft.Button("選択", on_click=open_cat_selector, height=30, style=ft.ButtonStyle(padding=5))
 
             # 直接入力：キーワード
             keyword_tf = ft.TextField(label="keyword", expand=True, text_size=12,value=page.filter_query[2])
