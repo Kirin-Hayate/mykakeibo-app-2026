@@ -37,7 +37,8 @@ def get_creds():
     if env_creds:
         # 文字列として保存されたJSONを辞書形式に変換して読み込む
         creds_dict = json.loads(env_creds)
-        return ServiceAccountCredentials.from_json_dict(creds_dict, scope)
+        # keyfile という言葉が入るのが oauth2client のルールです
+        return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     
     # 2. 環境変数がなければローカルのファイルを探す（PC開発用）
     if JSON_KEY_PATH.exists():
