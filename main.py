@@ -1593,7 +1593,7 @@ async def main(page: ft.Page):
     #日付変更ボタンのデザインや機能を規定
     dateselect_button = ft.Button(
         f"日付の変更",
-        icon="calendar_month",
+        icon=ft.Icons.CALENDAR_MONTH,
         on_click = open_picker
     )
 
@@ -1695,7 +1695,7 @@ async def main(page: ft.Page):
             page.update()
 
     #保存ボタン作成
-    save_button = ft.Button("スプレッドシートに保存",icon="save",on_click=save_to_sheets) 
+    save_button = ft.Button("スプレッドシートに保存",icon=ft.Icons.SAVE,on_click=save_to_sheets) 
 
     #カレンダーを仕込んでおく
     page.overlay.append(date_picker)
