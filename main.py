@@ -667,7 +667,7 @@ async def main(page: ft.Page):
                 chart.min_x = 0
                 chart.max_x = max_x - min_x
 
-                # --- X軸（日付）の計算: 間引き処理 ---
+# --- X軸（日付）の計算: 間引き処理 ---
                 duration = max_x - min_x
                 day_sec = 24 * 3600
                 
@@ -681,40 +681,52 @@ async def main(page: ft.Page):
                     x_interval = 30 * day_sec
                     date_fmt = "%Y/%m"
 
-                # X軸ラベル生成
+                # X軸ラベルの動的生成
+                # ここがサンプルの MAR, JUN, SEP と同じ仕組みです
                 labels = []
                 curr_rel_x = 0
                 while curr_rel_x <= (max_x - min_x):
                     dt_obj = datetime.fromtimestamp(min_x + curr_rel_x)
-                    # ChartAxisLabel をリストに格納
                     labels.append(
                         fch.ChartAxisLabel(
-                            value=curr_rel_x, 
-                            label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")
+                            value=curr_rel_x,  # サンプルの value=2, 5... と同じ。表示するX座標を指定
+                            label=ft.Container(
+                                margin=ft.Margin.only(top=10),
+                                content=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")
+                            )
                         )
                     )
                     curr_rel_x += x_interval
 
-                # 【重要】下軸を新しく作成して代入
+                # 【重要】引数名を interval と label_size に修正
                 chart.bottom_axis = fch.ChartAxis(
-                    labels=labels,            # ここでラベルリストを渡す
-                    #labels_interval=x_interval, # 間隔を秒数で指定
+                    labels=labels,
+                    #interval=x_interval,
                     label_size=40,
+                    title=ft.Text("日付"),
                     title_size=20,
                 )
 
-                # 最後にグリッド線も更新しておくと見やすくなります
+                # Y軸（金額）の設定も同様に修正
+                chart.left_axis = fch.ChartAxis(
+                    #interval=y_interval,
+                    label_size=50,
+                    title=ft.Text("金額 (¥)"),
+                    title_size=20,
+                )
+
+                # グリッド線の更新
                 chart.vertical_grid_lines = fch.ChartGridLines(
                     interval=x_interval,
                     color=ft.Colors.with_opacity(0.1, ft.Colors.GREY),
                     width=1
                 ) 
-                # 横グリッド線 (薄い灰色) - 計算済みのy_intervalを使用
                 chart.horizontal_grid_lines = fch.ChartGridLines(
                     interval=y_interval,
-                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.GREY),
                     width=1
                 )
+                
                 # 左軸ラベルの間隔も合わせる
                 #chart.left_axis.intervals = y_interval
 
@@ -725,7 +737,7 @@ async def main(page: ft.Page):
                     vals = [p.y for p in data]
                     return ft.Row([
                         ft.Text(f"{label}: ", color=color, weight="bold"),
-                        ft.Text(f"Current ¥{vals[-1]:,.0f} / Max ¥{max(vals):,.0f} / Min ¥{min(vals):,.0f}", size=12)
+                        ft.Text(f"\nCurrent ¥{vals[-1]:,.0f} \nMax ¥{max(vals):,.0f} \nMin ¥{min(vals):,.0f}", size=12)
                     ], spacing=5)
 
                 if show_bal: summary_col.controls.append(make_summary("Balance", data_bal, ft.Colors.CYAN))
@@ -734,9 +746,9 @@ async def main(page: ft.Page):
                     timeline_dialog.update()
 
             # UI部品
-            btn_inc = ft.TextButton("Income", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
-            btn_exp = ft.TextButton("Expense", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
-            btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
+            btn_inc = ft.TextButton("Inc", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
+            btn_exp = ft.TextButton("Exp", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
+            btn_bal = ft.TextButton("Bal", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
 
             # UI部品の定義箇所
             chart = fch.LineChart(
@@ -771,7 +783,7 @@ async def main(page: ft.Page):
             timeline_dialog = ft.AlertDialog(
                 title=ft.Text("推移グラフ"),
                 content=ft.Container(width=700, height=500, content=ft.Column([
-                    ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER,spacing=0),
                     summary_col, ft.Container(chart, expand=True, padding=10)])),
                 actions=[ft.TextButton("閉じる", on_click=close_timeline)]
             )
@@ -787,7 +799,7 @@ async def main(page: ft.Page):
                         on_click=lambda _: page.run_task(open_filter_dialog),
                         tooltip="絞り込み条件を開く" # ホバーした時に説明が出ます
                     ),
-                    ft.Text("←filtering", size=10, weight="bold"),
+                    ft.Text("←Filter", size=10, weight="bold"),
 
                     ft.IconButton(
                         icon=ft.Icons.PIE_CHART, 
@@ -795,7 +807,7 @@ async def main(page: ft.Page):
                         on_click= open_detailed_report,
                         tooltip="詳細な分析を開く" # ホバーした時に説明が出ます
                     ),
-                    ft.Text("←detailed report", size=10, weight="bold"),
+                    ft.Text("Breakdown", size=10, weight="bold"),
 
                     ft.IconButton(
                         icon=ft.Icons.SHOW_CHART, 
@@ -803,7 +815,7 @@ async def main(page: ft.Page):
                         on_click=open_timeline_dialog,
                         tooltip="推移を表示" 
                     ),
-                    ft.Text("←timeline", size=10, weight="bold"),
+                    ft.Text("Timeline", size=10, weight="bold"),
                 ],
                 alignment=ft.MainAxisAlignment.START, # 左寄せにする（これで隣接します）
                 vertical_alignment=ft.CrossAxisAlignment.CENTER, # 上下の中央を揃える
