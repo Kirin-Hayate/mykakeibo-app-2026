@@ -159,7 +159,7 @@ async def main(page: ft.Page):
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
-    page.title = "MyKAKEIBO ver.202603090029"
+    page.title = "MyKAKEIBO"
     page.window.width = 400
     page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
@@ -1478,7 +1478,7 @@ async def main(page: ft.Page):
         page.clean()
         
         # モードによらず必ず表示するものを追加
-        page.add(ft.Text("My家計簿", size=20),choice_segment)
+        page.add(ft.Text("\nMy家計簿", size=15),choice_segment)
 
         # 4. 【重要】現在のモードのページ作成を「タスク」として1回だけ起動
         # ここで await せずに create_task することで、スムーズに切り替わります
