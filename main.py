@@ -1688,4 +1688,10 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
-ft.run(main)
+if __name__ == "__main__":
+    # 環境変数 "RENDER" がある（＝Webサーバー上）ならブラウザ、なければデスクトップ
+    if os.getenv("RENDER"):
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER)
+    else:
+        # PCで実行したときは今まで通りデスクトップアプリとして起動
+        ft.run(main)
