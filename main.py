@@ -671,43 +671,44 @@ async def main(page: ft.Page):
                 duration = max_x - min_x
                 day_sec = 24 * 3600
                 
-                # 画面幅に合わせてラベル数を制限（少し緩めて表示数を確保）
-                if duration <= 14 * day_sec: # 2週間以内 -> 1日ごと
+                if duration <= 14 * day_sec: 
                     x_interval = day_sec
                     date_fmt = "%m/%d"
-                elif duration <= 90 * day_sec: # 3ヶ月以内 -> 1週間ごと
+                elif duration <= 90 * day_sec: 
                     x_interval = 7 * day_sec
                     date_fmt = "%m/%d"
-                elif duration <= 365 * day_sec: # 1年以内 -> 1ヶ月ごと
+                else: 
                     x_interval = 30 * day_sec
                     date_fmt = "%Y/%m"
-                elif duration <= 365 * 3 * day_sec: # 3年以内 -> 3ヶ月ごと
-                    x_interval = 90 * day_sec
-                    date_fmt = "%Y/%m"
-                else: # それ以上 -> 1年(365日)ごと
-                    x_interval = 365 * day_sec
-                    date_fmt = "%Y"
-
-                # 縦グリッド線 (薄い灰色)
-                chart.vertical_grid_lines = fch.ChartGridLines(
-                    interval=x_interval,
-                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
-                    width=1
-                )
 
                 # X軸ラベル生成
                 labels = []
-                # 相対座標(0スタート)でラベルを配置
                 curr_rel_x = 0
                 while curr_rel_x <= (max_x - min_x):
-                    # 表示用テキストは絶対時刻(min_x + rel_x)に戻して生成
                     dt_obj = datetime.fromtimestamp(min_x + curr_rel_x)
-                    labels.append(fch.ChartAxisLabel(value=curr_rel_x, label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")))
+                    # ChartAxisLabel をリストに格納
+                    labels.append(
+                        fch.ChartAxisLabel(
+                            value=curr_rel_x, 
+                            label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")
+                        )
+                    )
                     curr_rel_x += x_interval
 
-                chart.bottom_axis.labels = labels
-                chart.bottom_axis.labels_interval = x_interval
+                # 【重要】下軸を新しく作成して代入
+                chart.bottom_axis = fch.ChartAxis(
+                    labels=labels,            # ここでラベルリストを渡す
+                    #labels_interval=x_interval, # 間隔を秒数で指定
+                    label_size=40,
+                    title_size=20,
+                )
 
+                # 最後にグリッド線も更新しておくと見やすくなります
+                chart.vertical_grid_lines = fch.ChartGridLines(
+                    interval=x_interval,
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.GREY),
+                    width=1
+                ) 
                 # 横グリッド線 (薄い灰色) - 計算済みのy_intervalを使用
                 chart.horizontal_grid_lines = fch.ChartGridLines(
                     interval=y_interval,
@@ -715,7 +716,7 @@ async def main(page: ft.Page):
                     width=1
                 )
                 # 左軸ラベルの間隔も合わせる
-                chart.left_axis.labels_interval = y_interval
+                #chart.left_axis.intervals = y_interval
 
                 # サマリー表示 (Max/Min/Current)
                 summary_col.controls.clear()
