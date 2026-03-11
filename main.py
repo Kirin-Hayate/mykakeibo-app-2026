@@ -11,6 +11,8 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 import json
+from pyinstrument import Profiler  # 1. 追加
+
 
 # 1. このプログラム本体 (main.py) が置いてあるフォルダの絶対パスを特定する
 BASE_DIR = Path(__file__).parent
@@ -158,6 +160,10 @@ def SaveCategories(expense_list, income_list):
 
 #ページを駆動する部分
 async def main(page: ft.Page):
+    # --- ここから計測開始 ---
+    profiler = Profiler()
+    profiler.start()
+    # ----------------------
 
     from pathlib import Path
     
@@ -1706,6 +1712,12 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
+    # --- ここで一旦書き出し ---
+    profiler.stop()
+    profiler.write_html("speed_report.html")
+    print("【計測完了】起動時の解析結果を speed_report.html に保存しました！")
+    # -------------------------
+
 if __name__ == "__main__":
     # 環境変数 "RENDER" がある（＝Webサーバー上）ならブラウザ、なければデスクトップ
     if os.getenv("RENDER"):
@@ -1713,3 +1725,4 @@ if __name__ == "__main__":
     else:
         # PCで実行したときは今まで通りデスクトップアプリとして起動
         ft.run(main)
+
