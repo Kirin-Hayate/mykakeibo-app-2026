@@ -935,7 +935,7 @@ async def main(page: ft.Page):
                 page.update()
 
             edit_date_button = ft.Button(
-                text=f"日付: {current_edit_date}",
+                f"日付: {current_edit_date}",
                 icon=ft.Icons.CALENDAR_MONTH,
                 on_click=open_edit_date_picker
             )
