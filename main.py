@@ -117,9 +117,16 @@ def LoadCategories():
     
     try:
         sheet = client.open(SHEET_NAME).worksheet("Settings")
-        # 1列目(Expense)と2列目(Income)を取得（1行目は見出しなので除外）
-        expense_list = [x for x in sheet.col_values(1)[1:] if x] # 空文字除去
-        income_list = [x for x in sheet.col_values(2)[1:] if x]
+        # --- ここを修正：1回ですべて取得 ---
+        all_values = sheet.get_all_values()
+        
+        if not all_values or len(all_values) < 2:
+            return [], []
+            
+        # 1列目(Expense)と2列目(Income)をメモリ上で抽出（通信は発生しない）
+        expense_list = [row[0] for row in all_values[1:] if len(row) > 0 and row[0]]
+        income_list = [row[1] for row in all_values[1:] if len(row) > 1 and row[1]]
+        
         return expense_list, income_list
     except gspread.exceptions.WorksheetNotFound:
         print("Settingsシートが見つかりません。デフォルト値を使用します。")
@@ -1713,9 +1720,21 @@ async def main(page: ft.Page):
     await refresh_view()
 
     # --- ここで一旦書き出し ---
+    # 1. 計測を止める
     profiler.stop()
-    profiler.write_html("speed_report.html")
-    print("【計測完了】起動時の解析結果を speed_report.html に保存しました！")
+
+    # 2. 現在時刻を「20260312_0855」のような形式で取得
+    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # 3. 保存用フォルダがなければ作成する（BASE_DIRはコード冒頭で定義済みのものを使用）
+    report_dir = BASE_DIR / "performance_logs"
+    report_dir.mkdir(exist_ok=True)
+
+    # 4. フォルダパスとファイル名を結合して保存
+    report_path = report_dir / f"speed_report_{now_str}.html"
+    profiler.write_html(str(report_path))
+    
+    print(f"【計測完了】解析結果を {report_path} に保存しました！")
     # -------------------------
 
 if __name__ == "__main__":
