@@ -1311,6 +1311,101 @@ async def main(page: ft.Page):
 
         loading_text = ft.Text("読み込み,絞り込み中...", color="orange")
 
+                    #一覧表のデータを保持する変数data_table_column
+        data_table_column = ft.Column([], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
+        # 2. 【重要】先にソート関数を定義する（build_tableの中で使うため）
+        async def sort_column(e):
+            nonlocal sort_column_index, sort_ascending
+            sort_column_index = e.column_index
+            sort_ascending = not sort_ascending
+            
+            # 描画更新処理
+            page.remove(data_table_column)
+            print("page.remove(data_table_column)を実行しました")
+            page.update()
+            sorting_ring = ft.ProgressRing(width=16, height=16, stroke_width=2)
+            sorting_text = ft.Text("Now sorting...", size=16, color="red")
+            page.add(sorting_ring, sorting_text)
+            print("page.add(sorting_ring, sorting_text)を実行しました")
+            page.update()
+
+            await asyncio.sleep(0)
+
+            await asyncio.to_thread(build_table)
+            print("build_table()を実行しました")
+            page.remove(sorting_ring, sorting_text)
+            page.add(data_table_column)
+            page.update()
+
+        def build_table():
+            nonlocal data_table_column
+            # --- 【重要】ソートの実行 ---
+            if not filtered_data_rows:
+                # 1. 該当データがない場合
+                page.add(ft.Text("該当するデータが見つかりませんでした", size=16, color="red"))
+                status_label = ft.Text("", color="green", weight="bold")
+                page.update()
+                
+            else:
+                #該当データがあるときだけsortを実行する
+                # --- 画面幅に応じたレイアウト調整 ---
+                # page.width が取得できない場合を考慮してデフォルト値を設定
+                current_width = page.width if page.width else 400
+                
+                # 閾値を設定 (例: 600px以上ならPCライクな広々表示)
+                if current_width >= 600:
+                    table_column_spacing = 10
+                    # メモ欄の幅を動的に計算 (画面幅 - 他の列の概算幅)
+                    memo_col_width = max(200, current_width - 450) 
+                else:
+                    table_column_spacing = 2
+                    memo_col_width = 100
+
+                # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
+                # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
+                sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
+                target_idx = sort_map.get(sort_column_index, 0)
+
+                # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
+                filtered_data_rows.sort(
+                    key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
+                    reverse=not sort_ascending
+                )
+                # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
+                data_table = ft.DataTable(
+                    #高さ,幅
+                    data_row_min_height=20,    # 行の最小高さ
+                data_row_max_height=float("inf"),    # 行の最大高さ
+                    heading_row_height=20,     # 見出し（ヘッダー）行の高さ
+                    column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
+                    horizontal_margin=0, # DataTable自体の左右の余白をなくす
+
+                    sort_column_index=sort_column_index,
+                    sort_ascending=sort_ascending,
+                    columns=[
+                        ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
+                        ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
+                        ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
+                        ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
+                        ft.DataColumn(ft.Text("edit")),
+                    ],
+                    rows=[
+                        ft.DataRow(
+                            cells=[
+                                ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                                ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                                ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                                # widthを指定して強制的に折り返しさせる
+                                ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
+                                #↓編集用アイコンの設定
+                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY, on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
+                            ]
+                        ) for row in filtered_data_rows
+                    ],
+                )
+                data_table_column = ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True)
+
         #記録一覧の表示のメインルート(エラーがなければここを通る)
         try:
         # --- 適用されているフィルターを明示（条件がある時だけ白く光らせる） ---
@@ -1437,75 +1532,9 @@ async def main(page: ft.Page):
             if loading_text in page.controls:
                 page.controls.remove(loading_text)
 
-            # --- 【重要】ソートの実行 ---
-
-            if not filtered_data_rows:
-                # 1. 該当データがない場合
-                page.add(ft.Text("該当するデータが見つかりませんでした", size=16, color="red"))
-                status_label = ft.Text("", color="green", weight="bold")
-                page.update()
-                
-            else:
-                #該当データがあるときだけsortを実行する
-
-                # --- 画面幅に応じたレイアウト調整 ---
-                # page.width が取得できない場合を考慮してデフォルト値を設定
-                current_width = page.width if page.width else 400
-                
-                # 閾値を設定 (例: 600px以上ならPCライクな広々表示)
-                if current_width >= 600:
-                    table_column_spacing = 10
-                    # メモ欄の幅を動的に計算 (画面幅 - 他の列の概算幅)
-                    memo_col_width = max(200, current_width - 450) 
-                else:
-                    table_column_spacing = 2
-                    memo_col_width = 100
-
-                # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
-                # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
-                sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
-                target_idx = sort_map.get(sort_column_index, 0)
-
-                # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
-                filtered_data_rows.sort(
-                    key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
-                    reverse=not sort_ascending
-                )
-                # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
-                data_table = ft.DataTable(
-                    #高さ,幅
-                    data_row_min_height=20,    # 行の最小高さ
-                data_row_max_height=float("inf"),    # 行の最大高さ
-                    heading_row_height=20,     # 見出し（ヘッダー）行の高さ
-                    column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
-                    horizontal_margin=0, # DataTable自体の左右の余白をなくす
-
-                    sort_column_index=sort_column_index,
-                    sort_ascending=sort_ascending,
-                    columns=[
-                        ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
-                        ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("edit")),
-                    ],
-                    rows=[
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                # widthを指定して強制的に折り返しさせる
-                                ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                #↓編集用アイコンの設定
-                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY, on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
-                            ]
-                        ) for row in filtered_data_rows
-                    ],
-                )
-
-                page.add(ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True))
-                page.update()
+            build_table()
+            page.add(data_table_column)
+            page.update()
 
         except Exception as e: # どんなエラー（e）が起きたかを取得する
             # record が空の場合は、エラーメッセージを直接表示する
@@ -1547,15 +1576,6 @@ async def main(page: ft.Page):
             current_task = asyncio.create_task(make_analysispage())
         else:
             current_task = asyncio.create_task(make_recordingpage())
-
-    async def sort_column(e):
-        nonlocal sort_column_index, sort_ascending
-        # クリックされた列のインデックスを取得
-        sort_column_index = e.column_index
-        # 昇順・降順を反転させる
-        sort_ascending = not sort_ascending
-        # 再描画
-        await refresh_view()
 
     # NEW: Reload data function
     async def on_reload_data():
