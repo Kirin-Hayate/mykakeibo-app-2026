@@ -1332,7 +1332,7 @@ async def main(page: ft.Page):
 
             await asyncio.sleep(0)
 
-            await asyncio.to_thread(build_table)
+            build_table
             #print("build_table()を実行しました")
             page.remove(sorting_ring, sorting_text)
             page.add(data_table_column)
@@ -1340,71 +1340,68 @@ async def main(page: ft.Page):
 
         def build_table():
             nonlocal data_table_column
-            # --- 【重要】ソートの実行 ---
+
             if not filtered_data_rows:
-                # 1. 該当データがない場合
-                page.add(ft.Text("該当するデータが見つかりませんでした", size=16, color="red"))
-                status_label = ft.Text("", color="green", weight="bold")
+                status_label.value = "該当するデータが見つかりませんでした"
+                page.add(status_label)
                 page.update()
+                return
+
+            # 1. データのソート（メモリ上なので高速）
+            sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
+            target_idx = sort_map.get(sort_column_index, 0)
+            filtered_data_rows.sort(
+                key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
+                reverse=not sort_ascending
+            )
+
+            # 2. 1行分のデザインを定義（DataTable風）
+            def create_row_item(row):
+                # 金額に応じて色を変える
+                row_color = ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400
                 
-            else:
-                #該当データがあるときだけsortを実行する
-                # --- 画面幅に応じたレイアウト調整 ---
-                # page.width が取得できない場合を考慮してデフォルト値を設定
-                current_width = page.width if page.width else 400
-                
-                # 閾値を設定 (例: 600px以上ならPCライクな広々表示)
-                if current_width >= 600:
-                    table_column_spacing = 10
-                    # メモ欄の幅を動的に計算 (画面幅 - 他の列の概算幅)
-                    memo_col_width = max(200, current_width - 450) 
-                else:
-                    table_column_spacing = 2
-                    memo_col_width = 100
-
-                # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
-                # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
-                sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
-                target_idx = sort_map.get(sort_column_index, 0)
-
-                # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
-                filtered_data_rows.sort(
-                    key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
-                    reverse=not sort_ascending
+                return ft.Container(
+                    content=ft.Row([
+                        ft.Text(row[0], width=75, size=11, color=row_color), # 日付
+                        ft.Text(row[3], width=70, size=11, color=row_color, overflow=ft.TextOverflow.ELLIPSIS), # カテゴリ
+                        ft.Text(f"{float(row[2]):,.0f}", width=60, size=11, color=row_color, text_align="right"), # 金額
+                        ft.Text(row[4], expand=True, size=11, color=row_color, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS), # 内容
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT, 
+                            icon_size=16, 
+                            padding=0,
+                            on_click=lambda e: page.run_task(open_edit_dialog, row)
+                        ),
+                    ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=ft.Padding.symmetric(vertical=2, horizontal=5),
+                    # 警告対応: Border.only (大文字) を使用
+                    border=ft.Border(bottom=ft.BorderSide(0.5, ft.Colors.GREY_800)) 
                 )
-                # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
-                data_table = ft.DataTable(
-                    #高さ,幅
-                    data_row_min_height=20,    # 行の最小高さ
-                data_row_max_height=float("inf"),    # 行の最大高さ
-                    heading_row_height=20,     # 見出し（ヘッダー）行の高さ
-                    column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
-                    horizontal_margin=0, # DataTable自体の左右の余白をなくす
 
-                    sort_column_index=sort_column_index,
-                    sort_ascending=sort_ascending,
-                    columns=[
-                        ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
-                        ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("edit")),
-                    ],
-                    rows=[
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                # widthを指定して強制的に折り返しさせる
-                                ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                #↓編集用アイコンの設定
-                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY, on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
-                            ]
-                        ) for row in filtered_data_rows
-                    ],
-                )
-                data_table_column = ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True)
+            # 3. ヘッダーの作成（スクロール時に固定されるよう ListView の外に配置）
+            table_header = ft.Container(
+                bgcolor=ft.Colors.GREY_900,
+                content=ft.Row([
+                    ft.Text("日付", width=75, size=12, weight="bold"),
+                    ft.Text("カテゴリ", width=70, size=12, weight="bold"),
+                    ft.Text("金額", width=60, size=12, weight="bold", text_align="right"),
+                    ft.Text("内容", expand=True, size=12, weight="bold"),
+                    ft.Text(" ", width=30), # 編集アイコン用スペース
+                ], spacing=5),
+                padding=ft.Padding.symmetric(vertical=10, horizontal=5),
+                border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_700))
+            )
+
+            # 4. ListViewの作成
+            list_view = ft.ListView(
+                expand=True,
+                spacing=0,
+                # エラー対応: initial_scroll_pos を削除
+                controls=[create_row_item(r) for r in filtered_data_rows]
+            )
+
+            # 入れ物(data_table_column)の中身を更新
+            data_table_column.controls = [table_header, list_view]        
 
         #記録一覧の表示のメインルート(エラーがなければここを通る)
         try:
