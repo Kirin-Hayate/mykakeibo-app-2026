@@ -1359,12 +1359,11 @@ async def main(page: ft.Page):
 
             page.update()
 
-            # 修正後：すでに取ってあるデータがあればそれを使う
-            if hasattr(page, "initial_raw_data") and page.initial_raw_data:
-                raw_data = page.initial_raw_data
-                page.initial_raw_data = None  # 一度使ったらクリア（次回からは最新を取るため）
+            if hasattr(page, "cached_raw_data"):
+                raw_data = page.cached_raw_data
             else:
                 raw_data = await asyncio.to_thread(Yomikomi)
+                page.cached_raw_data = raw_data # 保存しておく
 
             # 1行目（見出し）、2行目以降（データ部分）を分離
             header = raw_data[0]
