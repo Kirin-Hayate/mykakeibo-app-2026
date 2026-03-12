@@ -709,7 +709,7 @@ async def main(page: ft.Page):
                 chart.min_x = 0
                 chart.max_x = max_x - min_x
 
-# --- X軸（日付）の計算: 間引き処理 ---
+                # --- X軸（日付）の計算: 間引き処理 ---
                 duration = max_x - min_x
                 day_sec = 24 * 3600
                 
@@ -1357,6 +1357,8 @@ async def main(page: ft.Page):
             # スプシからデータを取得
             #raw_data = await asyncio.to_thread(Yomikomi)#画面起動時にすでに読み込んでいる
 
+            page.update()
+
             # 修正後：すでに取ってあるデータがあればそれを使う
             if hasattr(page, "initial_raw_data") and page.initial_raw_data:
                 raw_data = page.initial_raw_data
@@ -1529,6 +1531,8 @@ async def main(page: ft.Page):
         
         # モードによらず必ず表示するものを追加
         page.add(ft.Text("\nMy家計簿", size=15),choice_segment)
+        page.update()
+        await asyncio.sleep(0) #画面更新の遅れの原因は、直後の重い処理。一瞬だけ眠らせることで、まずは描画を先にやらせる
 
         # 4. 【重要】現在のモードのページ作成を「タスク」として1回だけ起動
         # ここで await せずに create_task することで、スムーズに切り替わります
@@ -1536,8 +1540,6 @@ async def main(page: ft.Page):
             current_task = asyncio.create_task(make_analysispage())
         else:
             current_task = asyncio.create_task(make_recordingpage())
-            
-        page.update()
 
     async def sort_column(e):
         nonlocal sort_column_index, sort_ascending
