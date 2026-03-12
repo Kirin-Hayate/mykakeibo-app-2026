@@ -217,8 +217,20 @@ async def main(page: ft.Page):
     selected_category = None
     
     # --- カテゴリの初期化（スプシから読み込み、なければデフォルト） ---
-    loaded_expense, loaded_income = await asyncio.to_thread(LoadCategories)
-    
+    #loaded_expense, loaded_income = await asyncio.to_thread(LoadCategories)
+    # --- 修正後：ここから（並列読み込み） ---
+
+    # 1. 2つの重い通信処理を「予約」する
+    task_cat = asyncio.to_thread(LoadCategories)
+    task_data = asyncio.to_thread(Yomikomi)
+
+    # 2. 両方の通信が終わるのを同時に待つ（これが一番の時短！）
+    # これにより、別々に待つと 5秒+5秒 だったのが、5秒（長い方）だけで済みます
+    (loaded_expense, loaded_income), raw_data = await asyncio.gather(task_cat, task_data)
+
+    # 3. 取得した全データを、あとで refresh_view が使えるように page に一時保存しておく
+    page.initial_raw_data = raw_data
+
     if loaded_expense:
         options_expense_list = loaded_expense
     else:
@@ -1343,7 +1355,14 @@ async def main(page: ft.Page):
                 return filtered_record
 
             # スプシからデータを取得
-            raw_data = await asyncio.to_thread(Yomikomi)
+            #raw_data = await asyncio.to_thread(Yomikomi)#画面起動時にすでに読み込んでいる
+
+            # 修正後：すでに取ってあるデータがあればそれを使う
+            if hasattr(page, "initial_raw_data") and page.initial_raw_data:
+                raw_data = page.initial_raw_data
+                page.initial_raw_data = None  # 一度使ったらクリア（次回からは最新を取るため）
+            else:
+                raw_data = await asyncio.to_thread(Yomikomi)
 
             # 1行目（見出し）、2行目以降（データ部分）を分離
             header = raw_data[0]
