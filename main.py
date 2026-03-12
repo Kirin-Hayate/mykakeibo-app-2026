@@ -168,8 +168,8 @@ def SaveCategories(expense_list, income_list):
 #ページを駆動する部分
 async def main(page: ft.Page):
     # --- ここから計測開始 ---
-    profiler = Profiler()
-    profiler.start()
+    #profiler = Profiler()
+    #profiler.start()
     # ----------------------
 
     from pathlib import Path
@@ -1322,18 +1322,18 @@ async def main(page: ft.Page):
             
             # 描画更新処理
             page.remove(data_table_column)
-            print("page.remove(data_table_column)を実行しました")
+            #print("page.remove(data_table_column)を実行しました")
             page.update()
             sorting_ring = ft.ProgressRing(width=16, height=16, stroke_width=2)
             sorting_text = ft.Text("Now sorting...", size=16, color="red")
             page.add(sorting_ring, sorting_text)
-            print("page.add(sorting_ring, sorting_text)を実行しました")
+            #print("page.add(sorting_ring, sorting_text)を実行しました")
             page.update()
 
             await asyncio.sleep(0)
 
             await asyncio.to_thread(build_table)
-            print("build_table()を実行しました")
+            #print("build_table()を実行しました")
             page.remove(sorting_ring, sorting_text)
             page.add(data_table_column)
             page.update()
@@ -1776,6 +1776,7 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
+    """
     # --- ここで一旦書き出し ---
     # 1. 計測を止める
     profiler.stop()
@@ -1793,6 +1794,7 @@ async def main(page: ft.Page):
     
     print(f"【計測完了】解析結果を {report_path} に保存しました！")
     # -------------------------
+    """
 
 if __name__ == "__main__":
     # 環境変数 "RENDER" がある（＝Webサーバー上）ならブラウザ、なければデスクトップ
