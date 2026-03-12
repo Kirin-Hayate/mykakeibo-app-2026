@@ -858,6 +858,14 @@ async def main(page: ft.Page):
                         tooltip="推移を表示" 
                     ),
                     ft.Text("Timeline", size=10, weight="bold"),
+                    # Reload button
+                    ft.IconButton(
+                        icon=ft.Icons.REFRESH,
+                        icon_size=25,
+                        on_click=lambda _: page.run_task(on_reload_data),
+                        tooltip="データを再読み込み"
+                    ),
+                    ft.Text("Reload", size=10, weight="bold"),
                 ],
                 alignment=ft.MainAxisAlignment.START, # 左寄せにする（これで隣接します）
                 vertical_alignment=ft.CrossAxisAlignment.CENTER, # 上下の中央を揃える
@@ -1549,6 +1557,15 @@ async def main(page: ft.Page):
         # 再描画
         await refresh_view()
 
+    # NEW: Reload data function
+    async def on_reload_data():
+        # キャッシュされたデータを削除して、次回の refresh_view でスプレッドシートから再読み込みさせる
+        if hasattr(page, "cached_raw_data"):
+            del page.cached_raw_data
+        
+        # 画面を再描画して最新データを取得
+        await refresh_view()
+
     #Income/Expense/Analysisのモード切り替えについて
     async def mode_handle_change(e):
         nonlocal current_mode, status_label
@@ -1764,4 +1781,3 @@ if __name__ == "__main__":
     else:
         # PCで実行したときは今まで通りデスクトップアプリとして起動
         ft.run(main)
-
