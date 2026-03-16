@@ -1365,7 +1365,7 @@ async def main(page: ft.Page):
                         ft.Text(row[0], width=75, size=11, color=row_color), # 日付
                         ft.Text(row[3], width=70, size=11, color=row_color, overflow=ft.TextOverflow.ELLIPSIS), # カテゴリ
                         ft.Text(f"{float(row[2]):,.0f}", width=60, size=11, color=row_color, text_align="right"), # 金額
-                        ft.Text(row[4], expand=True, size=11, color=row_color, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS), # 内容
+                        ft.Text(row[4], expand=True, size=11, color=row_color, no_wrap=False), # 内容
                         ft.IconButton(
                             icon=ft.Icons.EDIT, 
                             icon_size=16, 
