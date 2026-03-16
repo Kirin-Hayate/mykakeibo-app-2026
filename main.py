@@ -13,6 +13,12 @@ from pathlib import Path
 import json
 from pyinstrument import Profiler  # 1. 追加
 
+loading_indicator = ft.Row(
+                        [ft.ProgressRing(width=16, height=16, stroke_width=2, color="orange"),
+                        ft.Text("Loading...", color="orange"),],
+                    alignment=ft.MainAxisAlignment.CENTER
+                        )
+
 
 # 1. このプログラム本体 (main.py) が置いてあるフォルダの絶対パスを特定する
 BASE_DIR = Path(__file__).parent
@@ -198,7 +204,8 @@ async def main(page: ft.Page):
             [
                 ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
-                ft.Text("設定を読み込み中...", size=16, color=ft.Colors.ORANGE),
+                ft.Text(f"connecting to {spreadsheet_key}", size=10, weight=ft.FontWeight.W_200, color=ft.Colors.WHITE),
+                loading_indicator,
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1309,8 +1316,6 @@ async def main(page: ft.Page):
             dialog.open = True
             page.update()
 
-        loading_text = ft.Text("読み込み,絞り込み中...", color="orange")
-
                     #一覧表のデータを保持する変数data_table_column
         data_table_column = ft.Column([], scroll=ft.ScrollMode.ALWAYS, expand=True)
 
@@ -1426,8 +1431,7 @@ async def main(page: ft.Page):
             )
             page.add(filtering_message)
 
-            #読み込み中メッセージ
-            page.add(loading_text)
+            page.add(loading_indicator)
             page.update() # ここで一度、画面に「読み込み中」を出す
 
             #データを絞り込むための関数
@@ -1526,8 +1530,8 @@ async def main(page: ft.Page):
             page.add(summary_card)
 
             # 読み込みが完了したのでメッセージを消去
-            if loading_text in page.controls:
-                page.controls.remove(loading_text)
+            if loading_indicator in page.controls:
+                page.controls.remove(loading_indicator)
 
             build_table()
             page.add(data_table_column)
@@ -1544,8 +1548,8 @@ async def main(page: ft.Page):
             page.update()
 
         #読み込み中　のメッセージを消去
-        if loading_text in page.controls:
-            page.controls.remove(loading_text)
+        if loading_indicator in page.controls:
+            page.controls.remove(loading_indicator)
             page.update()
 
     #画面を再読み込み（再構築）する関数を作る
