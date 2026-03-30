@@ -1318,6 +1318,7 @@ async def main(page: ft.Page):
 
                     #一覧表のデータを保持する変数data_table_column
         data_table_column = ft.Column([], expand=True)
+        now_loading_next100 = False
 
         # 2. 【重要】先にソート関数を定義する（build_tableの中で使うため）
         async def sort_column(e):
@@ -1377,11 +1378,18 @@ async def main(page: ft.Page):
 
             # --- 2. スクロールを検知して追加読み込みする関数 ---
             async def on_scroll(e: ft.OnScrollEvent):
-                nonlocal current_display_count
+                nonlocal current_display_count, now_loading_next100
                 # e.pixels が現在の位置、e.max_scroll_extent が最大位置
                 # 端から少し前(100pxくらい)で次を読み込むとスムーズ
-                if e.pixels >= e.max_scroll_extent - 100:
+                if e.pixels >= e.max_scroll_extent - 100 and now_loading_next100 == False:
                     if current_display_count < len(filtered_data_rows):
+                        now_loading_next100 = True
+
+                        print("次の100件を読み込み中")
+
+                        page.add(loading_indicator)
+                        page.update()
+                        await asyncio.sleep(0.1)
                         # 次の100件を取得
                         next_batch = filtered_data_rows[current_display_count : current_display_count + 100]
                         new_controls = [create_row_item(r) for r in next_batch]
@@ -1390,6 +1398,9 @@ async def main(page: ft.Page):
                         list_view.controls.extend(new_controls)
                         current_display_count += 100
                         list_view.update()
+                        page.remove(loading_indicator)
+                        page.update()
+                        now_loading_next100 = False
 
             # --- 3. 初回のListView生成 (最初の100件のみ) ---
             list_view = ft.ListView(
