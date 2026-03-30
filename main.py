@@ -1317,7 +1317,7 @@ async def main(page: ft.Page):
             page.update()
 
                     #一覧表のデータを保持する変数data_table_column
-        data_table_column = ft.Column([], scroll=ft.ScrollMode.ALWAYS, expand=True)
+        data_table_column = ft.Column([], expand=True)
 
         # 2. 【重要】先にソート関数を定義する（build_tableの中で使うため）
         async def sort_column(e):
@@ -1345,14 +1345,8 @@ async def main(page: ft.Page):
 
         def build_table():
             nonlocal data_table_column
-
-            if not filtered_data_rows:
-                status_label.value = "該当するデータが見つかりませんでした"
-                page.add(status_label)
-                page.update()
-                return
-
-            # 1. データのソート（メモリ上なので高速）
+            
+            # --- 1. データのソート (全件を対象にソートしておく) ---
             sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
             target_idx = sort_map.get(sort_column_index, 0)
             filtered_data_rows.sort(
@@ -1360,30 +1354,53 @@ async def main(page: ft.Page):
                 reverse=not sort_ascending
             )
 
-            # 2. 1行分のデザインを定義（DataTable風）
+            # 現在表示されている件数を管理する変数
+            current_display_count = 100
+            
             def create_row_item(row):
-                # 金額に応じて色を変える
                 row_color = ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400
-                
                 return ft.Container(
                     content=ft.Row([
-                        ft.Text(row[0], width=75, size=11, color=row_color), # 日付
-                        ft.Text(row[3], width=70, size=11, color=row_color, overflow=ft.TextOverflow.ELLIPSIS), # カテゴリ
-                        ft.Text(f"{float(row[2]):,.0f}", width=60, size=11, color=row_color, text_align="right"), # 金額
-                        ft.Text(row[4], expand=True, size=11, color=row_color, no_wrap=False), # 内容
-                        ft.IconButton(
-                            icon=ft.Icons.EDIT, 
-                            icon_size=16, 
-                            padding=0,
+                        ft.Text(row[0], width=75, size=11, color=row_color),
+                        ft.Text(row[3], width=70, size=11, color=row_color, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(f"{float(row[2]):,.0f}", width=60, size=11, color=row_color, text_align="right"),
+                        ft.Text(row[4], expand=True, size=11, color=row_color, no_wrap=False),
+                        # EDITアイコンから文字ボタンへ変更
+                        ft.TextButton(
+                            content=ft.Text("EDIT", size=10, weight=ft.FontWeight.W_400, color=ft.Colors.GREY_500),
                             on_click=lambda e: page.run_task(open_edit_dialog, row)
                         ),
-                    ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=ft.Padding.symmetric(vertical=2, horizontal=5),
-                    # 警告対応: Border.only (大文字) を使用
-                    border=ft.Border(bottom=ft.BorderSide(0.5, ft.Colors.GREY_800)) 
+                    ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.START),
+                    padding=ft.Padding.symmetric(vertical=5, horizontal=5),
+                    border=ft.Border(bottom=ft.BorderSide(0.5, ft.Colors.GREY_800))
                 )
 
-            # 3. ヘッダーの作成（スクロール時に固定されるよう ListView の外に配置）
+            # --- 2. スクロールを検知して追加読み込みする関数 ---
+            async def on_scroll(e: ft.OnScrollEvent):
+                nonlocal current_display_count
+                # e.pixels が現在の位置、e.max_scroll_extent が最大位置
+                # 端から少し前(100pxくらい)で次を読み込むとスムーズ
+                if e.pixels >= e.max_scroll_extent - 100:
+                    if current_display_count < len(filtered_data_rows):
+                        # 次の100件を取得
+                        next_batch = filtered_data_rows[current_display_count : current_display_count + 100]
+                        new_controls = [create_row_item(r) for r in next_batch]
+                        
+                        # ListViewに直接追加
+                        list_view.controls.extend(new_controls)
+                        current_display_count += 100
+                        list_view.update()
+
+            # --- 3. 初回のListView生成 (最初の100件のみ) ---
+            list_view = ft.ListView(
+                expand=True,
+                spacing=0,
+                controls=[create_row_item(r) for r in filtered_data_rows[:100]],
+                on_scroll=on_scroll, # スクロールイベントを登録
+                scroll_interval=100 # 検知する頻度(ミリ秒)
+            )
+
+            # ヘッダー (前回の修正を反映)
             table_header = ft.Container(
                 bgcolor=ft.Colors.GREY_900,
                 content=ft.Row([
@@ -1391,22 +1408,13 @@ async def main(page: ft.Page):
                     ft.Text("カテゴリ", width=70, size=12, weight="bold"),
                     ft.Text("金額", width=60, size=12, weight="bold", text_align="right"),
                     ft.Text("内容", expand=True, size=12, weight="bold"),
-                    ft.Text(" ", width=30), # 編集アイコン用スペース
+                    ft.Text(" ", width=50), # EDITボタン用
                 ], spacing=5),
                 padding=ft.Padding.symmetric(vertical=10, horizontal=5),
                 border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_700))
             )
 
-            # 4. ListViewの作成
-            list_view = ft.ListView(
-                expand=True,
-                spacing=0,
-                # エラー対応: initial_scroll_pos を削除
-                controls=[create_row_item(r) for r in filtered_data_rows]
-            )
-
-            # 入れ物(data_table_column)の中身を更新
-            data_table_column.controls = [table_header, list_view]        
+            data_table_column.controls = [table_header, list_view]
 
         #記録一覧の表示のメインルート(エラーがなければここを通る)
         try:
