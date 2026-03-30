@@ -169,7 +169,7 @@ def SaveCategories(expense_list, income_list):
     except Exception as e:
         print(f"カテゴリ保存エラー: {e}")
 
-
+current_scroll_task = None
 
 #ページを駆動する部分
 async def main(page: ft.Page):
@@ -179,6 +179,8 @@ async def main(page: ft.Page):
     # ----------------------
 
     from pathlib import Path
+
+    
     
     # 画像ファイルへの絶対パスを作る
     BASE_DIR = Path(__file__).parent
@@ -1378,29 +1380,50 @@ async def main(page: ft.Page):
 
             # --- 2. スクロールを検知して追加読み込みする関数 ---
             async def on_scroll(e: ft.OnScrollEvent):
-                nonlocal current_display_count, now_loading_next100
-                # e.pixels が現在の位置、e.max_scroll_extent が最大位置
-                # 端から少し前(100pxくらい)で次を読み込むとスムーズ
-                if e.pixels >= e.max_scroll_extent - 100 and now_loading_next100 == False:
-                    if current_display_count < len(filtered_data_rows):
-                        now_loading_next100 = True
+                global current_scroll_task
+    
+                # 1. すでに動いているスクロール処理があれば、強制停止（キャンセル）する
+                if current_scroll_task is not None and not current_scroll_task.done():
+                    current_scroll_task.cancel()
+                    try:
+                        await current_scroll_task
+                    except asyncio.CancelledError:
+                        pass # キャンセル成功
+                
+                # 2. 実際の処理を「タスク」として登録して実行
+                async def scroll_logic():
+                    nonlocal current_display_count, now_loading_next100                   
+                    # e.pixels が現在の位置、e.max_scroll_extent が最大位置
+                    # 端から少し前(100pxくらい)で次を読み込むとスムーズ
+                    if e.pixels >= e.max_scroll_extent - 100 and now_loading_next100 == False:
+                        if current_display_count < len(filtered_data_rows):
+                            now_loading_next100 = True
 
-                        print("次の100件を読み込み中")
+                            print("次の100件を読み込み中")
 
-                        page.add(loading_indicator)
-                        page.update()
-                        await asyncio.sleep(0.1)
-                        # 次の100件を取得
-                        next_batch = filtered_data_rows[current_display_count : current_display_count + 100]
-                        new_controls = [create_row_item(r) for r in next_batch]
-                        
-                        # ListViewに直接追加
-                        list_view.controls.extend(new_controls)
-                        current_display_count += 100
-                        list_view.update()
-                        page.remove(loading_indicator)
-                        page.update()
-                        now_loading_next100 = False
+                            page.add(loading_indicator)
+                            page.update()
+                            await asyncio.sleep(0.1)
+                            # 次の100件を取得
+                            next_batch = filtered_data_rows[current_display_count : current_display_count + 100]
+                            new_controls = []
+                            for i, r in enumerate(next_batch):
+                                # 10件ごとに一瞬だけ処理を中断し、キャンセル命令や画面更新を受け付ける隙を作る
+                                if i % 10 == 0:
+                                    await asyncio.sleep(0)
+                                
+                                item = create_row_item(r)
+                                new_controls.append(item)
+                            
+                            # ListViewに直接追加
+                            list_view.controls.extend(new_controls)
+                            current_display_count += 100
+                            list_view.update()
+                            page.remove(loading_indicator)
+                            page.update()
+                            now_loading_next100 = False
+
+                current_scroll_task = asyncio.create_task(scroll_logic())
 
             # --- 3. 初回のListView生成 (最初の100件のみ) ---
             list_view = ft.ListView(
@@ -1608,7 +1631,15 @@ async def main(page: ft.Page):
 
     #Income/Expense/Analysisのモード切り替えについて
     async def mode_handle_change(e):
+        global current_scroll_task
         nonlocal current_mode, status_label
+
+        # Analysis 以外に切り替えるなら、スクロールタスクを即座に殺す
+        if current_scroll_task and not current_scroll_task.done():
+            current_scroll_task.cancel()
+            # ここで await しなくても、次の page.update() 等でリソースは解放されます
+            page.update()
+
         if e.control.selected:
             #集合(set)から最初の値を取り出す
             val = list(e.control.selected)[0]
