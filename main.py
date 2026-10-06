@@ -16,9 +16,15 @@ main.py
 - セッションごとに独立した AppState をインスタンス化し、マルチユーザー接続時のタスク競合を排除。
 - 初期起動時にカテゴリ情報と全レコードを非同期並列（asyncio.gather）で高速読み込み。
 - SegmentedButton（Expense / Income / Analysis）の切り替えに応じ、コンテンツコンテナのみを差分再描画。
+
+【Windowsでの終了フリーズ対策】
+page.window.on_event および page.on_disconnect を監視し、
+デスクトップウィンドウが閉じられた瞬間にバックグラウンドタスクを停止し
+os._exit(0) で安全にプロセスを解放してターミナルへ戻します。
 """
 
 import os
+import sys
 import asyncio
 import flet as ft
 
@@ -36,10 +42,27 @@ from services.sheets_service import sheets_service
 
 
 async def main(page: ft.Page):
-    """
-    ユーザーが接続（または起動）した際に実行されるメインライフサイクル関数。
-    セッションごとに完全に分離された状態（AppState）とUIツリーを構築・維持する。
-    """
+    # セッション個別のステートをインスタンス化
+    state = AppState()
+
+    # --------------------------------------------------------------------------
+    # 0. ウィンドウ終了ハンドラ（Windows環境のConnectionResetError対策）
+    # --------------------------------------------------------------------------
+    def handle_window_event(e: ft.WindowEvent):
+        if e.type in ("close", "destroy"):
+            state.cancel_tasks()
+            if os.getenv("APP_ENV", "local").lower() != "server":
+                os._exit(0)
+
+    def handle_disconnect(e):
+        state.cancel_tasks()
+        if os.getenv("APP_ENV", "local").lower() != "server":
+            os._exit(0)
+
+    page.window.prevent_close = False
+    page.window.on_event = handle_window_event
+    page.on_disconnect = handle_disconnect
+
     # --------------------------------------------------------------------------
     # 1. ページ初期設定（テーマ、ウィンドウサイズ、アイコン）
     # --------------------------------------------------------------------------
@@ -49,12 +72,8 @@ async def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 5
 
-    # アイコンが存在する場合はタスクバー/ウィンドウアイコンに適用
     if ICON_PATH.exists():
         page.window.icon = str(ICON_PATH)
-
-    # セッション個別のステートをインスタンス化
-    state = AppState()
 
     # --------------------------------------------------------------------------
     # 2. 初期ロード画面の表示（接続中演出）
@@ -83,7 +102,6 @@ async def main(page: ft.Page):
     task_data = asyncio.to_thread(sheets_service.get_all_records)
     (loaded_expense, loaded_income), _ = await asyncio.gather(task_cat, task_data)
 
-    # 読み込んだカテゴリ（またはデフォルト）をステートに格納
     if loaded_expense:
         state.expense_categories = loaded_expense
     else:
@@ -101,44 +119,37 @@ async def main(page: ft.Page):
     # --------------------------------------------------------------------------
     # 4. メインUI構造の定義とルーティング
     # --------------------------------------------------------------------------
-    # ロード画面をクリアし、通常の左上揃えレイアウトへ移行
     page.clean()
     page.vertical_alignment = ft.MainAxisAlignment.START
     page.horizontal_alignment = ft.CrossAxisAlignment.START
 
-    # 画面下部のメインコンテンツを表示するためのコンテナ
     content_container = ft.Column(expand=True, spacing=10)
 
     async def refresh_view():
-        """現在のモードに合わせて画面コンテンツを再描画する"""
         state.cancel_tasks()
         content_container.controls.clear()
 
-        # 描画切り替え時のローディング表示
         content_container.controls.append(create_loading_indicator())
         page.update()
-        await asyncio.sleep(0)  # UIスレッドへ制御を戻して描画を先行
+        await asyncio.sleep(0)
 
         content_container.controls.clear()
         if state.current_mode == "Analysis":
             analysis_controls = await build_analysis_view(page, state, refresh_view)
             content_container.controls.extend(analysis_controls)
         else:
-            # Expense または Income 入力画面
             record_controls = build_record_view(page, state)
             content_container.controls.extend(record_controls)
 
         page.update()
 
     async def on_mode_change(e: ft.ControlEvent):
-        """最上部 SegmentedButton の切り替えハンドラ"""
         if e.control.selected:
             selected_mode = list(e.control.selected)[0]
             state.current_mode = selected_mode
             choice_segment.selected = [selected_mode]
             await refresh_view()
 
-    # モード切り替えセグメントボタン
     choice_segment = ft.SegmentedButton(
         selected=[state.current_mode],
         allow_multiple_selection=False,
@@ -150,20 +161,16 @@ async def main(page: ft.Page):
         ],
     )
 
-    # 常時表示される共通ヘッダーとコンテンツコンテナを追加
     page.add(
         ft.Text("My家計簿", size=20, weight=ft.FontWeight.BOLD),
         choice_segment,
         content_container
     )
 
-    # 初回画面描画を実行
     await refresh_view()
 
 
 if __name__ == "__main__":
-    # 環境変数 APP_ENV で起動モードを判定
-    # "server" 指定時は常時稼働サーバー向けに外部公開 Web サーバーとして起動
     app_env = os.getenv("APP_ENV", "local").lower()
 
     if app_env == "server":
@@ -175,6 +182,5 @@ if __name__ == "__main__":
             view=ft.AppView.WEB_BROWSER
         )
     else:
-        # デフォルトはノートPCでの確認・デバッグ用デスクトップUI起動
         print("[MyKAKEIBO] ローカルPCモード起動 (デスクトップUI)")
         ft.run(main)
