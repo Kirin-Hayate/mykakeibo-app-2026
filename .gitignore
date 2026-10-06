@@ -9,9 +9,6 @@ __pycache__/
 
 # OS生成ファイル
 .DS_Store
-<<<<<<< HEAD
 
 old_records
-=======
 Thumbs.db
->>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587

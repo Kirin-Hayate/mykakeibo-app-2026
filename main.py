@@ -4,18 +4,18 @@ main.py
 【このコードの目的・機能・挙動】
 家計簿アプリケーション全体の起動エントリーポイントおよび画面ルーティングを司る最上位モジュールです。
 
-【旧コードからの改善点・動作原理】
-1. Celeron J4125 / Xubuntu サーバー環境（systemd）向けの完全対応:
-   旧コードでは os.getenv("RENDER") の判定のみで、自前サーバー向けのリッスンホスト・ポートが
-   未定義でした。本モジュールでは config.settings から SERVER_HOST（0.0.0.0）と
-   SERVER_PORT（8501等）を読み込み、外部端末のブラウザから確実にアクセスできるように起動します。
-2. セッション独立性の確立（マルチユーザー接続の安定化）:
-   アクセスしてきたブラウザ（Fletページ）ごとに独立した AppState を生成し、
-   初期カテゴリと初期明細データの並列読み込み（asyncio.gather）を効率よく実行します。
-3. 高速な画面モード切替（ルーティング）:
-   最上部の SegmentedButton（Expense / Income / Analysis）の切り替えに応じて、
-   コンテンツ表示コンテナ（content_container）の中身を動的に差し替えます。
-   ページ全体を毎回白紙化（page.clean）する無駄を省き、チラつきを抑えて高速に応答します。
+【実行環境の自動切り替え】
+.env の APP_ENV（local または server）を読み取り、以下の通り起動挙動を自動分岐します。
+1. ノートPC（APP_ENV=local）:
+   デスクトップアプリとしてウィンドウ表示で即座に起動し、手元でのUI確認やデバッグを可能にします。
+2. ミニPCサーバー（APP_ENV=server）:
+   ホスト 0.0.0.0、ポート 8501（または環境変数指定）で常駐Webサーバーとして立ち上がり、
+   同一LAN内のブラウザ（スマホやPC）からアクセス可能にします。
+
+【動作仕様】
+- セッションごとに独立した AppState をインスタンス化し、マルチユーザー接続時のタスク競合を排除。
+- 初期起動時にカテゴリ情報と全レコードを非同期並列（asyncio.gather）で高速読み込み。
+- SegmentedButton（Expense / Income / Analysis）の切り替えに応じ、コンテンツコンテナのみを差分再描画。
 """
 
 import os
@@ -37,8 +37,8 @@ from services.sheets_service import sheets_service
 
 async def main(page: ft.Page):
     """
-    ユーザーが接続した際に呼ばれるメインライフサイクル関数。
-    セッションごとに完全に分離された状態とUIツリーを構築・維持する。
+    ユーザーが接続（または起動）した際に実行されるメインライフサイクル関数。
+    セッションごとに完全に分離された状態（AppState）とUIツリーを構築・維持する。
     """
     # --------------------------------------------------------------------------
     # 1. ページ初期設定（テーマ、ウィンドウサイズ、アイコン）
@@ -49,6 +49,7 @@ async def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 5
 
+    # アイコンが存在する場合はタスクバー/ウィンドウアイコンに適用
     if ICON_PATH.exists():
         page.window.icon = str(ICON_PATH)
 
@@ -113,7 +114,7 @@ async def main(page: ft.Page):
         state.cancel_tasks()
         content_container.controls.clear()
 
-        # 描画切り替えのローディング表示
+        # 描画切り替え時のローディング表示
         content_container.controls.append(create_loading_indicator())
         page.update()
         await asyncio.sleep(0)  # UIスレッドへ制御を戻して描画を先行
@@ -161,12 +162,12 @@ async def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # 環境変数または引数でWeb公開モードを判定
-    # CHUWI HeroBox常時稼働サーバー向けに、デフォルトで 0.0.0.0 / ポート8501 でブラウザ公開
-    is_web = os.getenv("WEB_MODE", "1") == "1"
+    # 環境変数 APP_ENV で起動モードを判定
+    # "server" 指定時は常時稼働サーバー向けに外部公開 Web サーバーとして起動
+    app_env = os.getenv("APP_ENV", "local").lower()
 
-    if is_web:
-        print(f"[MyKAKEIBO] サーバー起動中: http://{SERVER_HOST}:{SERVER_PORT}")
+    if app_env == "server":
+        print(f"[MyKAKEIBO] サーバーモード起動: http://{SERVER_HOST}:{SERVER_PORT}")
         ft.run(
             main,
             host=SERVER_HOST,
@@ -174,5 +175,6 @@ if __name__ == "__main__":
             view=ft.AppView.WEB_BROWSER
         )
     else:
-        # ローカル開発時のデスクトップネイティブ表示
+        # デフォルトはノートPCでの確認・デバッグ用デスクトップUI起動
+        print("[MyKAKEIBO] ローカルPCモード起動 (デスクトップUI)")
         ft.run(main)
