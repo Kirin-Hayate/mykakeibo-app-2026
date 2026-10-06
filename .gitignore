@@ -9,3 +9,5 @@ __pycache__/
 # OSのゴミ
 Thumbs.db
 .DS_Store
+
+old_records
