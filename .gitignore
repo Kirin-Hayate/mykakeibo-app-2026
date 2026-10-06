@@ -1,13 +1,17 @@
-# すべてのJSONファイルを無視（秘密鍵の漏洩を物理的に防ぐ）
-*.json
-*.env
-
-# Pythonのキャッシュ
+# 仮想環境
+.venv/
 __pycache__/
 *.pyc
 
-# OSのゴミ
-Thumbs.db
+# 秘密情報（絶対にアップロードしない！）
+.env
+*.json
+
+# OS生成ファイル
 .DS_Store
+<<<<<<< HEAD
 
 old_records
+=======
+Thumbs.db
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587

@@ -1,15 +1,33 @@
 import os
 import flet as ft
+import flet_charts as fch
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import asyncio
+<<<<<<< HEAD
 import uuid
+=======
+from datetime import timedelta
+import uuid # LineChartDataPoint のために追加
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
 import math
 from dotenv import load_dotenv
 from pathlib import Path
+<<<<<<< HEAD
 from flet.line_charts import Data as LineChartData, DataPoint as LineChartDataPoint
 from flet.pie_charts import Section as PieChartSection
+=======
+import json
+from pyinstrument import Profiler  # 1. 追加
+
+loading_indicator = ft.Row(
+                        [ft.ProgressRing(width=16, height=16, stroke_width=2, color="orange"),
+                        ft.Text("Loading...", color="orange"),],
+                    alignment=ft.MainAxisAlignment.CENTER
+                        )
+
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
 
 # --- プログラム全体の基準パスを1回だけ定義 ---
 BASE_DIR = Path(__file__).parent
@@ -20,6 +38,24 @@ ENV_PATH = BASE_DIR / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 spreadsheet_key = os.getenv("MYKAKEIBO_SPREADSHEET_NAME")
 
+#Web公開に向けて、鍵は「ファイルがあればファイルから、なければ環境変数から読み込む」という仕組みにしたい
+def get_creds():
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    
+    # 1. 環境変数をチェック（Web公開用）
+    env_creds = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    if env_creds:
+        # 文字列として保存されたJSONを辞書形式に変換して読み込む
+        creds_dict = json.loads(env_creds)
+        # keyfile という言葉が入るのが oauth2client のルールです
+        return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    
+    # 2. 環境変数がなければローカルのファイルを探す（PC開発用）
+    if JSON_KEY_PATH.exists():
+        return ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    
+    raise Exception("認証情報が見つかりません。")
+
 #スプシへの書き込みを行う関数 Kakikomi()
 def Kakikomi(record):
     # 1.認証フェーズ（「通行証」の準備）ーーーーーーーーーーーーーーーーー
@@ -27,7 +63,7 @@ def Kakikomi(record):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
     #creds: ~.json（秘密鍵）を読み込み、「私は許可されたプログラムです」というデジタルな通行証を作成しています。
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope) # ここにファイル名
+    creds = get_creds()
 
     # 2. 接続フェーズ（「扉」を開ける）
     #authorize: 通行証をGoogleのサーバーに提示し、操作を許可してもらいます。
@@ -47,7 +83,7 @@ def Kakikomi(record):
 # 特定のUUIDを持つ行を探して更新・削除する関数
 def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     sheet = client.open(spreadsheet_key).worksheet("Recordings")
     
@@ -71,7 +107,7 @@ def UpdateOrDeleteSheet(target_uuid, new_record=None, mode="UPDATE"):
 #戻り値dataは、リスト[['日付', 'モード', '金額', 'カテゴリ', '内容', '記録した日時','UUID'], ...]
 def Yomikomi():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key 
     sheet = client.open(SHEET_NAME).worksheet("Recordings")
@@ -83,18 +119,22 @@ def Yomikomi():
 # カテゴリ設定を読み込む関数 LoadCategories()
 def LoadCategories():
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
-        client = gspread.authorize(creds)
-        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
-        # 1列目(Expense)と2列目(Income)を取得（1行目は見出しなので除外）
-        expense_list = [x for x in sheet.col_values(1)[1:] if x] # 空文字除去
-        income_list = [x for x in sheet.col_values(2)[1:] if x]
+        # --- ここを修正：1回ですべて取得 ---
+        all_values = sheet.get_all_values()
+        
+        if not all_values or len(all_values) < 2:
+            return [], []
+            
+        # 1列目(Expense)と2列目(Income)をメモリ上で抽出（通信は発生しない）
+        expense_list = [row[0] for row in all_values[1:] if len(row) > 0 and row[0]]
+        income_list = [row[1] for row in all_values[1:] if len(row) > 1 and row[1]]
+        
         return expense_list, income_list
     except gspread.exceptions.WorksheetNotFound:
         print("Settingsシートが見つかりません。デフォルト値を使用します。")
@@ -106,14 +146,11 @@ def LoadCategories():
 # カテゴリ設定を保存する関数 SaveCategories()
 def SaveCategories(expense_list, income_list):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH), scope)
+    creds = get_creds()
     client = gspread.authorize(creds)
     SHEET_NAME = spreadsheet_key
     
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(str(JSON_KEY_PATH).json, scope)
-        client = gspread.authorize(creds)
-        SHEET_NAME = spreadsheet_key
         sheet = client.open(SHEET_NAME).worksheet("Settings")
         
         # データを作成（見出し + データ）
@@ -134,12 +171,18 @@ def SaveCategories(expense_list, income_list):
     except Exception as e:
         print(f"カテゴリ保存エラー: {e}")
 
-
+current_scroll_task = None
 
 #ページを駆動する部分
 async def main(page: ft.Page):
+    # --- ここから計測開始 ---
+    #profiler = Profiler()
+    #profiler.start()
+    # ----------------------
 
     from pathlib import Path
+
+    
     
     #画像ファイルへの絶対パスを作る
     #BASE_DIR = Path(__file__).parent
@@ -151,7 +194,7 @@ async def main(page: ft.Page):
     # 現在実行中のメインタスクを保持する変数
     current_task = None
 
-    page.title = "MyKAKEIBO ver.202603090029"
+    page.title = "MyKAKEIBO"
     page.window.width = 400
     page.window.height = 700
     page.theme_mode = ft.ThemeMode.DARK
@@ -164,12 +207,21 @@ async def main(page: ft.Page):
             [
                 ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
+<<<<<<< HEAD
                 ft.Text("設定を読み込み中...", size=16, color=ft.Colors.ORANGE),
+=======
+                ft.Text(f"connecting to {spreadsheet_key}", size=10, weight=ft.FontWeight.W_200, color=ft.Colors.WHITE),
+                loading_indicator,
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         )
     )
+    page.update()
+    
+    # ページのデフォルトパディングを設定
+    page.padding = 5
     page.update()
 
     #モード切替(Expense/Income/Analysis)
@@ -179,8 +231,20 @@ async def main(page: ft.Page):
     selected_category = None
     
     # --- カテゴリの初期化（スプシから読み込み、なければデフォルト） ---
-    loaded_expense, loaded_income = await asyncio.to_thread(LoadCategories)
-    
+    #loaded_expense, loaded_income = await asyncio.to_thread(LoadCategories)
+    # --- 修正後：ここから（並列読み込み） ---
+
+    # 1. 2つの重い通信処理を「予約」する
+    task_cat = asyncio.to_thread(LoadCategories)
+    task_data = asyncio.to_thread(Yomikomi)
+
+    # 2. 両方の通信が終わるのを同時に待つ（これが一番の時短！）
+    # これにより、別々に待つと 5秒+5秒 だったのが、5秒（長い方）だけで済みます
+    (loaded_expense, loaded_income), raw_data = await asyncio.gather(task_cat, task_data)
+
+    # 3. 取得した全データを、あとで refresh_view が使えるように page に一時保存しておく
+    page.initial_raw_data = raw_data
+
     if loaded_expense:
         options_expense_list = loaded_expense
     else:
@@ -302,7 +366,11 @@ async def main(page: ft.Page):
         except Exception:
             calc_result.value = "Error"
         page.update()
+<<<<<<< HEAD
 
+=======
+    # DeprecationWarning: ElevatedButton is deprecated. Use Button instead.
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
     calc_button = ft.Button("計算", on_click=on_calculate)
 
     #画面に部品を追加(Income/Expenseにおけるレイアウトの指定)
@@ -397,7 +465,11 @@ async def main(page: ft.Page):
                     
                     # グラフ用セクション（順位のみ表示）
                     sections.append(
+<<<<<<< HEAD
                         PieChartSection(
+=======
+                        fch.PieChartSection(
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
                             value=val,
                             title=str(rank),
                             color=color,
@@ -415,7 +487,7 @@ async def main(page: ft.Page):
                                     bgcolor=color,
                                     border_radius=10,
                                     width=16, height=16,
-                                    alignment=ft.alignment.center
+                                    alignment=ft.Alignment(0, 0)
                                 )),
                                 ft.DataCell(ft.Text(cat, size=12)),
                                 ft.DataCell(ft.Text(f"{percentage:.1f}%", size=12)),
@@ -426,7 +498,11 @@ async def main(page: ft.Page):
 
                 # 半円にするための透明なダミーセクション（合計値と同じサイズ）
                 sections.append(
+<<<<<<< HEAD
                     PieChartSection(
+=======
+                    fch.PieChartSection(
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
                         value=total_val,
                         title="",
                         color=ft.Colors.TRANSPARENT,
@@ -437,7 +513,7 @@ async def main(page: ft.Page):
                 # チャートの構築
                 # start_degree_offset=180 で9時の位置から開始
                 # 時計回りにデータが配置され、下半分（透明）で円が閉じる
-                chart = ft.PieChart(
+                chart = fch.PieChart(
                     sections=sections,
                     sections_space=0,
                     center_space_radius=40,
@@ -454,11 +530,11 @@ async def main(page: ft.Page):
                                 ft.Text("Total", size=10, color="grey"),
                                 ft.Text(total_text, size=14, weight="bold", color=total_color)
                             ], alignment=ft.MainAxisAlignment.CENTER, spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                            alignment=ft.alignment.center,
-                            padding=ft.padding.only(bottom=10) # 中心より少し上に配置
+                            alignment=ft.Alignment(0, 0),
+                            padding=ft.Padding.only(bottom=10) # 中心より少し上に配置
                         )
                     ],
-                    alignment=ft.alignment.center
+                    alignment=ft.Alignment(0, 0)
                 )
 
                 # テーブルの構築
@@ -481,9 +557,9 @@ async def main(page: ft.Page):
                     ft.Container(
                         chart_stack, 
                         height=180, # 円全体(直径180)が収まる高さを確保して描画崩れを防ぐ
-                        alignment=ft.alignment.center,
+                        alignment=ft.Alignment(0, 0),
                         # bottomのマイナスを減らして、下のテーブルとの間隔を確保（食い込み防止）
-                        margin=ft.margin.only(top=0, bottom=-70) 
+                        margin=ft.Margin.only(top=0, bottom=-70) 
                     ), 
                     table
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
@@ -584,9 +660,16 @@ async def main(page: ft.Page):
                 # ツールチップに日付と金額を表示
                 # tooltip プロパティに直接文字列を入れるのではなく、
                 # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
+<<<<<<< HEAD
                 data_inc.append(LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
                 data_exp.append(LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
                 data_bal.append(LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
+=======
+                # ft. を取って、インポートした LineChartDataPoint を直接使います
+                data_inc.append(fch.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
+                data_exp.append(fch.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
+                data_bal.append(fch.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
 
             # 4. 表示切り替え用のステート
             show_date = True
@@ -617,6 +700,7 @@ async def main(page: ft.Page):
                 all_visible_points = []
 
                 if show_inc and data_inc:
+<<<<<<< HEAD
                     line_series.append(LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
                     all_visible_points.extend(data_inc)
                 if show_exp and data_exp:
@@ -624,6 +708,15 @@ async def main(page: ft.Page):
                     all_visible_points.extend(data_exp)
                 if show_bal and data_bal:
                     line_series.append(LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+=======
+                    line_series.append(fch.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
+                    all_visible_points.extend(data_inc) # 追加
+                if show_exp and data_exp:
+                    line_series.append(fch.LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
+                    all_visible_points.extend(data_exp) # 追加
+                if show_bal and data_bal:
+                    line_series.append(fch.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
                     all_visible_points.extend(data_bal)
 
                 # --- Y軸（金額）の計算: キリのいい間隔にする ---
@@ -662,51 +755,64 @@ async def main(page: ft.Page):
                 duration = max_x - min_x
                 day_sec = 24 * 3600
                 
-                # 画面幅に合わせてラベル数を制限（少し緩めて表示数を確保）
-                if duration <= 14 * day_sec: # 2週間以内 -> 1日ごと
+                if duration <= 14 * day_sec: 
                     x_interval = day_sec
                     date_fmt = "%m/%d"
-                elif duration <= 90 * day_sec: # 3ヶ月以内 -> 1週間ごと
+                elif duration <= 90 * day_sec: 
                     x_interval = 7 * day_sec
                     date_fmt = "%m/%d"
-                elif duration <= 365 * day_sec: # 1年以内 -> 1ヶ月ごと
+                else: 
                     x_interval = 30 * day_sec
                     date_fmt = "%Y/%m"
-                elif duration <= 365 * 3 * day_sec: # 3年以内 -> 3ヶ月ごと
-                    x_interval = 90 * day_sec
-                    date_fmt = "%Y/%m"
-                else: # それ以上 -> 1年(365日)ごと
-                    x_interval = 365 * day_sec
-                    date_fmt = "%Y"
 
-                # 縦グリッド線 (薄い灰色)
-                chart.vertical_grid_lines = ft.ChartGridLines(
-                    interval=x_interval,
-                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
-                    width=1
-                )
-
-                # X軸ラベル生成
+                # X軸ラベルの動的生成
+                # ここがサンプルの MAR, JUN, SEP と同じ仕組みです
                 labels = []
-                # 相対座標(0スタート)でラベルを配置
                 curr_rel_x = 0
                 while curr_rel_x <= (max_x - min_x):
-                    # 表示用テキストは絶対時刻(min_x + rel_x)に戻して生成
                     dt_obj = datetime.fromtimestamp(min_x + curr_rel_x)
-                    labels.append(ft.ChartAxisLabel(value=curr_rel_x, label=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")))
+                    labels.append(
+                        fch.ChartAxisLabel(
+                            value=curr_rel_x,  # サンプルの value=2, 5... と同じ。表示するX座標を指定
+                            label=ft.Container(
+                                margin=ft.Margin.only(top=10),
+                                content=ft.Text(dt_obj.strftime(date_fmt), size=10, weight="bold")
+                            )
+                        )
+                    )
                     curr_rel_x += x_interval
 
-                chart.bottom_axis.labels = labels
-                chart.bottom_axis.labels_interval = x_interval
+                # 【重要】引数名を interval と label_size に修正
+                chart.bottom_axis = fch.ChartAxis(
+                    labels=labels,
+                    #interval=x_interval,
+                    label_size=40,
+                    title=ft.Text("日付"),
+                    title_size=20,
+                )
 
-                # 横グリッド線 (薄い灰色) - 計算済みのy_intervalを使用
-                chart.horizontal_grid_lines = ft.ChartGridLines(
+                # Y軸（金額）の設定も同様に修正
+                chart.left_axis = fch.ChartAxis(
+                    #interval=y_interval,
+                    label_size=50,
+                    title=ft.Text("金額 (¥)"),
+                    title_size=20,
+                )
+
+                # グリッド線の更新
+                chart.vertical_grid_lines = fch.ChartGridLines(
+                    interval=x_interval,
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.GREY),
+                    width=1
+                ) 
+                chart.horizontal_grid_lines = fch.ChartGridLines(
                     interval=y_interval,
-                    color=ft.Colors.with_opacity(0.2, ft.Colors.GREY),
+                    color=ft.Colors.with_opacity(0.1, ft.Colors.GREY),
                     width=1
                 )
+                
                 # 左軸ラベルの間隔も合わせる
-                chart.left_axis.labels_interval = y_interval
+                #chart.left_axis.intervals = y_interval
 
                 # サマリー表示 (Max/Min/Current)
                 summary_col.controls.clear()
@@ -715,7 +821,7 @@ async def main(page: ft.Page):
                     vals = [p.y for p in data]
                     return ft.Row([
                         ft.Text(f"{label}: ", color=color, weight="bold"),
-                        ft.Text(f"Current ¥{vals[-1]:,.0f} / Max ¥{max(vals):,.0f} / Min ¥{min(vals):,.0f}", size=12)
+                        ft.Text(f"\nCurrent ¥{vals[-1]:,.0f} \nMax ¥{max(vals):,.0f} \nMin ¥{min(vals):,.0f}", size=12)
                     ], spacing=5)
 
                 if show_bal: summary_col.controls.append(make_summary("Balance", data_bal, ft.Colors.CYAN))
@@ -724,6 +830,7 @@ async def main(page: ft.Page):
                     timeline_dialog.update()
 
             # UI部品
+<<<<<<< HEAD
             btn_inc = ft.TextButton("Income", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
             btn_exp = ft.TextButton("Expense", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
             btn_bal = ft.TextButton("Balance", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
@@ -732,6 +839,32 @@ async def main(page: ft.Page):
                                  left_axis=ft.ChartAxis(labels_size=40), bottom_axis=ft.ChartAxis(labels_size=32),
                                  tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
                                 )
+=======
+            btn_inc = ft.TextButton("Inc", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
+            btn_exp = ft.TextButton("Exp", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
+            btn_bal = ft.TextButton("Bal", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
+
+            # UI部品の定義箇所
+            chart = fch.LineChart(
+                expand=True,
+                border=ft.Border.all(1, ft.Colors.GREY_800),
+                # 最新仕様では labels プロパティを省略せず、ChartAxis を直接設定
+                left_axis=fch.ChartAxis(
+                    label_size=50,
+                    title=ft.Text("金額 (¥)"),
+                    title_size=20,
+                ),
+                bottom_axis=fch.ChartAxis(
+                    label_size=40,
+                    title=ft.Text("日付"),
+                    title_size=20,
+                ),
+                #tooltip_bgcolor=ft.Colors.with_opacity(0.8, ft.Colors.GREY_900),
+                # グラフの余白を少し作ると見やすくなります
+                #top_axis=fch.ChartAxisLabel(visible=False),
+                #right_axis=fch.ChartAxisLabel(visible=False),
+            )
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
             summary_col = ft.Column()
 
             async def close_timeline(e):
@@ -745,7 +878,7 @@ async def main(page: ft.Page):
             timeline_dialog = ft.AlertDialog(
                 title=ft.Text("推移グラフ"),
                 content=ft.Container(width=700, height=500, content=ft.Column([
-                    ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Row([btn_inc, btn_exp, btn_bal], alignment=ft.MainAxisAlignment.CENTER,spacing=0),
                     summary_col, ft.Container(chart, expand=True, padding=10)])),
                 actions=[ft.TextButton("閉じる", on_click=close_timeline)]
             )
@@ -761,7 +894,7 @@ async def main(page: ft.Page):
                         on_click=lambda _: page.run_task(open_filter_dialog),
                         tooltip="絞り込み条件を開く" # ホバーした時に説明が出ます
                     ),
-                    ft.Text("←filtering", size=10, weight="bold"),
+                    ft.Text("Filter", size=10, weight="bold"),
 
                     ft.IconButton(
                         icon=ft.Icons.PIE_CHART, 
@@ -769,7 +902,7 @@ async def main(page: ft.Page):
                         on_click= open_detailed_report,
                         tooltip="詳細な分析を開く" # ホバーした時に説明が出ます
                     ),
-                    ft.Text("←detailed report", size=10, weight="bold"),
+                    ft.Text("Breakdown", size=10, weight="bold"),
 
                     ft.IconButton(
                         icon=ft.Icons.SHOW_CHART, 
@@ -777,7 +910,15 @@ async def main(page: ft.Page):
                         on_click=open_timeline_dialog,
                         tooltip="推移を表示" 
                     ),
-                    ft.Text("←timeline", size=10, weight="bold"),
+                    ft.Text("Timeline", size=10, weight="bold"),
+                    # Reload button
+                    ft.IconButton(
+                        icon=ft.Icons.REFRESH,
+                        icon_size=25,
+                        on_click=lambda _: page.run_task(on_reload_data),
+                        tooltip="データを再読み込み"
+                    ),
+                    ft.Text("Reload", size=10, weight="bold"),
                 ],
                 alignment=ft.MainAxisAlignment.START, # 左寄せにする（これで隣接します）
                 vertical_alignment=ft.CrossAxisAlignment.CENTER, # 上下の中央を揃える
@@ -880,7 +1021,11 @@ async def main(page: ft.Page):
                 page.update()
 
             edit_date_button = ft.Button(
+<<<<<<< HEAD
                 text=f"日付: {current_edit_date}",
+=======
+                f"日付: {current_edit_date}",
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
                 icon=ft.Icons.CALENDAR_MONTH,
                 on_click=open_edit_date_picker
             )
@@ -1221,7 +1366,137 @@ async def main(page: ft.Page):
             dialog.open = True
             page.update()
 
-        loading_text = ft.Text("読み込み,絞り込み中...", color="orange")
+                    #一覧表のデータを保持する変数data_table_column
+        data_table_column = ft.Column([], expand=True)
+        now_loading_next100 = False
+
+        # 2. 【重要】先にソート関数を定義する（build_tableの中で使うため）
+        async def sort_column(e):
+            nonlocal sort_column_index, sort_ascending
+            sort_column_index = e.column_index
+            sort_ascending = not sort_ascending
+            
+            # 描画更新処理
+            page.remove(data_table_column)
+            #print("page.remove(data_table_column)を実行しました")
+            page.update()
+            sorting_ring = ft.ProgressRing(width=16, height=16, stroke_width=2)
+            sorting_text = ft.Text("Now sorting...", size=16, color="red")
+            page.add(sorting_ring, sorting_text)
+            #print("page.add(sorting_ring, sorting_text)を実行しました")
+            page.update()
+
+            await asyncio.sleep(0)
+
+            build_table
+            #print("build_table()を実行しました")
+            page.remove(sorting_ring, sorting_text)
+            page.add(data_table_column)
+            page.update()
+
+        def build_table():
+            nonlocal data_table_column
+            
+            # --- 1. データのソート (全件を対象にソートしておく) ---
+            sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
+            target_idx = sort_map.get(sort_column_index, 0)
+            filtered_data_rows.sort(
+                key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
+                reverse=not sort_ascending
+            )
+
+            # 現在表示されている件数を管理する変数
+            current_display_count = 100
+            
+            def create_row_item(row):
+                row_color = ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400
+                return ft.Container(
+                    content=ft.Row([
+                        ft.Text(row[0], width=75, size=11, color=row_color),
+                        ft.Text(row[3], width=70, size=11, color=row_color, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(f"{float(row[2]):,.0f}", width=60, size=11, color=row_color, text_align="right"),
+                        ft.Text(row[4], expand=True, size=11, color=row_color, no_wrap=False),
+                        # EDITアイコンから文字ボタンへ変更
+                        ft.TextButton(
+                            content=ft.Text("EDIT", size=10, weight=ft.FontWeight.W_400, color=ft.Colors.GREY_500),
+                            on_click=lambda e: page.run_task(open_edit_dialog, row)
+                        ),
+                    ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.START),
+                    padding=ft.Padding.symmetric(vertical=5, horizontal=5),
+                    border=ft.Border(bottom=ft.BorderSide(0.5, ft.Colors.GREY_800))
+                )
+
+            # --- 2. スクロールを検知して追加読み込みする関数 ---
+            async def on_scroll(e: ft.OnScrollEvent):
+                global current_scroll_task
+    
+                # 1. すでに動いているスクロール処理があれば、強制停止（キャンセル）する
+                if current_scroll_task is not None and not current_scroll_task.done():
+                    current_scroll_task.cancel()
+                    try:
+                        await current_scroll_task
+                    except asyncio.CancelledError:
+                        pass # キャンセル成功
+                
+                # 2. 実際の処理を「タスク」として登録して実行
+                async def scroll_logic():
+                    nonlocal current_display_count, now_loading_next100                   
+                    # e.pixels が現在の位置、e.max_scroll_extent が最大位置
+                    # 端から少し前(100pxくらい)で次を読み込むとスムーズ
+                    if e.pixels >= e.max_scroll_extent - 100 and now_loading_next100 == False:
+                        if current_display_count < len(filtered_data_rows):
+                            now_loading_next100 = True
+
+                            print("次の100件を読み込み中")
+
+                            page.add(loading_indicator)
+                            page.update()
+                            await asyncio.sleep(0.1)
+                            # 次の100件を取得
+                            next_batch = filtered_data_rows[current_display_count : current_display_count + 100]
+                            new_controls = []
+                            for i, r in enumerate(next_batch):
+                                # 10件ごとに一瞬だけ処理を中断し、キャンセル命令や画面更新を受け付ける隙を作る
+                                if i % 10 == 0:
+                                    await asyncio.sleep(0)
+                                
+                                item = create_row_item(r)
+                                new_controls.append(item)
+                            
+                            # ListViewに直接追加
+                            list_view.controls.extend(new_controls)
+                            current_display_count += 100
+                            list_view.update()
+                            page.remove(loading_indicator)
+                            page.update()
+                            now_loading_next100 = False
+
+                current_scroll_task = asyncio.create_task(scroll_logic())
+
+            # --- 3. 初回のListView生成 (最初の100件のみ) ---
+            list_view = ft.ListView(
+                expand=True,
+                spacing=0,
+                controls=[create_row_item(r) for r in filtered_data_rows[:100]],
+                on_scroll=on_scroll, # スクロールイベントを登録
+                scroll_interval=100 # 検知する頻度(ミリ秒)
+            )
+
+            # ヘッダー (前回の修正を反映)
+            table_header = ft.Container(
+                bgcolor=ft.Colors.GREY_900,
+                content=ft.Row([
+                    ft.Text("日付", width=75, size=12, weight="bold"),
+                    ft.Text("カテゴリ", width=70, size=12, weight="bold"),
+                    ft.Text("金額", width=60, size=12, weight="bold", text_align="right"),
+                    ft.Text("内容", expand=True, size=12, weight="bold"),
+                    ft.Text(" ", width=50), # EDITボタン用
+                ], spacing=5),
+                padding=ft.Padding.symmetric(vertical=10, horizontal=5),
+                border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_700))
+            )
+
+            data_table_column.controls = [table_header, list_view]
 
         #記録一覧の表示のメインルート(エラーがなければここを通る)
         try:
@@ -1246,8 +1521,7 @@ async def main(page: ft.Page):
             )
             page.add(filtering_message)
 
-            #読み込み中メッセージ
-            page.add(loading_text)
+            page.add(loading_indicator)
             page.update() # ここで一度、画面に「読み込み中」を出す
 
             #データを絞り込むための関数
@@ -1275,7 +1549,15 @@ async def main(page: ft.Page):
                 return filtered_record
 
             # スプシからデータを取得
-            raw_data = await asyncio.to_thread(Yomikomi)
+            #raw_data = await asyncio.to_thread(Yomikomi)#画面起動時にすでに読み込んでいる
+
+            page.update()
+
+            if hasattr(page, "cached_raw_data"):
+                raw_data = page.cached_raw_data
+            else:
+                raw_data = await asyncio.to_thread(Yomikomi)
+                page.cached_raw_data = raw_data # 保存しておく
 
             # 1行目（見出し）、2行目以降（データ部分）を分離
             header = raw_data[0]
@@ -1331,84 +1613,23 @@ async def main(page: ft.Page):
                 padding=10,
                 bgcolor=ft.Colors.GREY_900,
                 border_radius=10,
+<<<<<<< HEAD
                 border=ft.Border.all(1, "grey800"),
+=======
+                border=ft.Border.all(1, "grey800"), # DeprecationWarning対応
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
             )
 
             # 画面に追加
             page.add(summary_card)
 
             # 読み込みが完了したのでメッセージを消去
-            if loading_text in page.controls:
-                page.controls.remove(loading_text)
+            if loading_indicator in page.controls:
+                page.controls.remove(loading_indicator)
 
-            # --- 【重要】ソートの実行 ---
-
-            if not filtered_data_rows:
-                # 1. 該当データがない場合
-                page.add(ft.Text("該当するデータが見つかりませんでした", size=16, color="red"))
-                status_label = ft.Text("", color="green", weight="bold")
-                page.update()
-                
-            else:
-                #該当データがあるときだけsortを実行する
-
-                # --- 画面幅に応じたレイアウト調整 ---
-                # page.width が取得できない場合を考慮してデフォルト値を設定
-                current_width = page.width if page.width else 400
-                
-                # 閾値を設定 (例: 600px以上ならPCライクな広々表示)
-                if current_width >= 600:
-                    table_column_spacing = 10
-                    # メモ欄の幅を動的に計算 (画面幅 - 他の列の概算幅)
-                    memo_col_width = max(200, current_width - 450) 
-                else:
-                    table_column_spacing = 2
-                    memo_col_width = 100
-
-                # 表示上の列番号(sort_column_index)と、データ内のインデックスの対応マップ
-                # 0(日付) -> 0, 1(カテゴリ) -> 3, 2(金額) -> 2, 3(内容) -> 4
-                sort_map = {0: 0, 1: 3, 2: 2, 3: 4}
-                target_idx = sort_map.get(sort_column_index, 0)
-
-                # lambdaを使って、指定されたインデックス（sort_column_index）の値で並び替え
-                filtered_data_rows.sort(
-                    key=lambda x: (float(x[2]) if x[2] else 0) if sort_column_index == 2 else x[target_idx],
-                    reverse=not sort_ascending
-                )
-                # ※金額（index 2）の時は数値として比較するために float() 変換を入れるのがコツです。
-                data_table = ft.DataTable(
-                    #高さ,幅
-                    data_row_min_height=20,    # 行の最小高さ
-                data_row_max_height=float("inf"),    # 行の最大高さ
-                    heading_row_height=20,     # 見出し（ヘッダー）行の高さ
-                    column_spacing=table_column_spacing,          # 列同士の横の隙間を動的に設定
-
-                    sort_column_index=sort_column_index,
-                    sort_ascending=sort_ascending,
-                    columns=[
-                        ft.DataColumn(ft.Text("日付"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("カテゴリ"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("金額"), numeric=True, on_sort=sort_column),
-                        ft.DataColumn(ft.Text("内容"), on_sort=sort_column),
-                        ft.DataColumn(ft.Text("edit")),
-                    ],
-                    rows=[
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(ft.Text(row[0], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[3], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                ft.DataCell(ft.Text(row[2], color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                # widthを指定して強制的に折り返しさせる
-                                ft.DataCell(ft.Text(row[4], width=memo_col_width, no_wrap=False, color=ft.Colors.ORANGE_ACCENT if row[1] == "Expense" else ft.Colors.GREEN_400)),
-                                #↓編集用アイコンの設定
-                                ft.DataCell(ft.IconButton(icon=ft.Icons.EDIT, icon_color=ft.Colors.GREY, on_click=lambda e, r=row: page.run_task(open_edit_dialog, r)))                          
-                            ]
-                        ) for row in filtered_data_rows
-                    ],
-                )
-
-                page.add(ft.Column([data_table], scroll=ft.ScrollMode.ALWAYS, expand=True))
-                page.update()
+            build_table()
+            page.add(data_table_column)
+            page.update()
 
         except Exception as e: # どんなエラー（e）が起きたかを取得する
             # record が空の場合は、エラーメッセージを直接表示する
@@ -1421,8 +1642,8 @@ async def main(page: ft.Page):
             page.update()
 
         #読み込み中　のメッセージを消去
-        if loading_text in page.controls:
-            page.controls.remove(loading_text)
+        if loading_indicator in page.controls:
+            page.controls.remove(loading_indicator)
             page.update()
 
     #画面を再読み込み（再構築）する関数を作る
@@ -1440,7 +1661,9 @@ async def main(page: ft.Page):
         page.clean()
         
         # モードによらず必ず表示するものを追加
-        page.add(ft.Text("My家計簿", size=20),choice_segment)
+        page.add(ft.Text("\nMy家計簿", size=15),choice_segment)
+        page.update()
+        await asyncio.sleep(0) #画面更新の遅れの原因は、直後の重い処理。一瞬だけ眠らせることで、まずは描画を先にやらせる
 
         # 4. 【重要】現在のモードのページ作成を「タスク」として1回だけ起動
         # ここで await せずに create_task することで、スムーズに切り替わります
@@ -1448,21 +1671,27 @@ async def main(page: ft.Page):
             current_task = asyncio.create_task(make_analysispage())
         else:
             current_task = asyncio.create_task(make_recordingpage())
-            
-        page.update()
 
-    async def sort_column(e):
-        nonlocal sort_column_index, sort_ascending
-        # クリックされた列のインデックスを取得
-        sort_column_index = e.column_index
-        # 昇順・降順を反転させる
-        sort_ascending = not sort_ascending
-        # 再描画
+    # NEW: Reload data function
+    async def on_reload_data():
+        # キャッシュされたデータを削除して、次回の refresh_view でスプレッドシートから再読み込みさせる
+        if hasattr(page, "cached_raw_data"):
+            del page.cached_raw_data
+        
+        # 画面を再描画して最新データを取得
         await refresh_view()
 
     #Income/Expense/Analysisのモード切り替えについて
     async def mode_handle_change(e):
+        global current_scroll_task
         nonlocal current_mode, status_label
+
+        # Analysis 以外に切り替えるなら、スクロールタスクを即座に殺す
+        if current_scroll_task and not current_scroll_task.done():
+            current_scroll_task.cancel()
+            # ここで await しなくても、次の page.update() 等でリソースは解放されます
+            page.update()
+
         if e.control.selected:
             #集合(set)から最初の値を取り出す
             val = list(e.control.selected)[0]
@@ -1538,7 +1767,7 @@ async def main(page: ft.Page):
     #日付変更ボタンのデザインや機能を規定
     dateselect_button = ft.Button(
         f"日付の変更",
-        icon="calendar_month",
+        icon=ft.Icons.CALENDAR_MONTH,
         on_click = open_picker
     )
 
@@ -1640,7 +1869,7 @@ async def main(page: ft.Page):
             page.update()
 
     #保存ボタン作成
-    save_button = ft.Button("スプレッドシートに保存",icon="save",on_click=save_to_sheets) 
+    save_button = ft.Button("スプレッドシートに保存",icon=ft.Icons.SAVE,on_click=save_to_sheets) 
 
     #カレンダーを仕込んでおく
     page.overlay.append(date_picker)
@@ -1650,4 +1879,34 @@ async def main(page: ft.Page):
     page.horizontal_alignment = ft.CrossAxisAlignment.START
     await refresh_view()
 
+<<<<<<< HEAD
 ft.run(main)
+=======
+    """
+    # --- ここで一旦書き出し ---
+    # 1. 計測を止める
+    profiler.stop()
+
+    # 2. 現在時刻を「20260312_0855」のような形式で取得
+    now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # 3. 保存用フォルダがなければ作成する（BASE_DIRはコード冒頭で定義済みのものを使用）
+    report_dir = BASE_DIR / "performance_logs"
+    report_dir.mkdir(exist_ok=True)
+
+    # 4. フォルダパスとファイル名を結合して保存
+    report_path = report_dir / f"speed_report_{now_str}.html"
+    profiler.write_html(str(report_path))
+    
+    print(f"【計測完了】解析結果を {report_path} に保存しました！")
+    # -------------------------
+    """
+
+if __name__ == "__main__":
+    # 環境変数 "RENDER" がある（＝Webサーバー上）ならブラウザ、なければデスクトップ
+    if os.getenv("RENDER"):
+        ft.run(main, view=ft.AppView.WEB_BROWSER)
+    else:
+        # PCで実行したときは今まで通りデスクトップアプリとして起動
+        ft.run(main)
+>>>>>>> aae2caa3df066fcbc5c60eadb6d47b5759cad587
