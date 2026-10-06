@@ -8,6 +8,8 @@ import uuid
 import math
 from dotenv import load_dotenv
 from pathlib import Path
+from flet.line_charts import Data as LineChartData, DataPoint as LineChartDataPoint
+from flet.pie_charts import Section as PieChartSection
 
 # --- プログラム全体の基準パスを1回だけ定義 ---
 BASE_DIR = Path(__file__).parent
@@ -395,7 +397,7 @@ async def main(page: ft.Page):
                     
                     # グラフ用セクション（順位のみ表示）
                     sections.append(
-                        ft.PieChartSection(
+                        PieChartSection(
                             value=val,
                             title=str(rank),
                             color=color,
@@ -424,7 +426,7 @@ async def main(page: ft.Page):
 
                 # 半円にするための透明なダミーセクション（合計値と同じサイズ）
                 sections.append(
-                    ft.PieChartSection(
+                    PieChartSection(
                         value=total_val,
                         title="",
                         color=ft.Colors.TRANSPARENT,
@@ -582,9 +584,9 @@ async def main(page: ft.Page):
                 # ツールチップに日付と金額を表示
                 # tooltip プロパティに直接文字列を入れるのではなく、
                 # 文字列が確実にクリーンな状態（余計な引用符がない状態）で渡るようにします。
-                data_inc.append(ft.LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
-                data_exp.append(ft.LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
-                data_bal.append(ft.LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
+                data_inc.append(LineChartDataPoint(rel_x, cum_inc, tooltip=f"+{cum_inc:,.0f}|+{inc:,.0f}"))
+                data_exp.append(LineChartDataPoint(rel_x, cum_exp, tooltip=f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"))
+                data_bal.append(LineChartDataPoint(rel_x, cum_bal, tooltip=f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"))
 
             # 4. 表示切り替え用のステート
             show_date = True
@@ -615,13 +617,13 @@ async def main(page: ft.Page):
                 all_visible_points = []
 
                 if show_inc and data_inc:
-                    line_series.append(ft.LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
+                    line_series.append(LineChartData(data_inc, color=ft.Colors.GREEN, stroke_width=3))
                     all_visible_points.extend(data_inc)
                 if show_exp and data_exp:
-                    line_series.append(ft.LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
+                    line_series.append(LineChartData(data_exp, color=ft.Colors.RED, stroke_width=3))
                     all_visible_points.extend(data_exp)
                 if show_bal and data_bal:
-                    line_series.append(ft.LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
+                    line_series.append(LineChartData(data_bal, color=ft.Colors.CYAN, stroke_width=3))
                     all_visible_points.extend(data_bal)
 
                 # --- Y軸（金額）の計算: キリのいい間隔にする ---

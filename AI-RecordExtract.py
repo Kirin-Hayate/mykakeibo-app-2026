@@ -30,7 +30,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- 設定 ---
 PROJECT_ID = "kakeibofrom202602032126"
 LOCATION = "us-central1" 
-IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\2025"
+IMAGE_FOLDER = r"C:\Users\hayat\OneDrive\デスクトップ\家計簿アプリの作成\old_records\ぬけもれ補完"
 # 移行済みのフォルダ名
 PROCESSED_DIR_NAME = "移行済記録"
 
