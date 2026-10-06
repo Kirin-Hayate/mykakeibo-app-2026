@@ -1,6 +1,16 @@
-flet
-flet-charts
-gspread
-oauth2client
-python-dotenv
-pyinstrument 
+# ==============================================================================
+# requirements.txt
+#
+# 【このファイルの目的・機能・挙動】
+# 家計簿アプリをUbuntu常時稼働サーバー（CHUWI HeroBox）上で動作させるために
+# 必要な外部Pythonライブラリの一覧と推奨バージョンを定義します。
+# 旧来の非推奨ライブラリ（oauth2client）を排除し、公式推奨の google-auth へ
+# 移行して接続の高速化と安定性を担保します。
+# ==============================================================================
+
+flet>=0.25.0
+flet-charts>=0.2.0
+gspread>=6.1.0
+google-auth>=2.30.0
+google-auth-oauthlib>=1.2.0
+python-dotenv>=1.0.0

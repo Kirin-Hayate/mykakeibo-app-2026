@@ -1,0 +1,6 @@
+flet
+flet-charts
+gspread
+oauth2client
+python-dotenv
+pyinstrument 
