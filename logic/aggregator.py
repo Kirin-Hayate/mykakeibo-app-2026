@@ -5,6 +5,10 @@ logic/aggregator.py
 UI（Flet）から独立して動作する集計・統計計算モジュールです。
 LineChart単一統合向けに、各柱を独立した矩形（4点）として算出し、
 0円ラインから柱の内部のみを安全に塗りつぶすためのデータを生成します。
+また、Balance折れ線上のホバーツールチップ向けに以下の3行フォーマットを生成します:
+  1行目: 選択日の日付 (YYYY/MM/DD)
+  2行目: 選択日までの累計収支 (+/- 符号付き)
+  3行目: 選択日の収入 | 選択日の支出 (+/- 符号付き)
 """
 
 import math
@@ -191,28 +195,45 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
                 offset = (dt - b["start"]).total_seconds()
                 exact_x = idx + (offset / bin_duration)
 
+                # ツールチップの書式整形（3行表示）
+                sign_bal = f"+{cum_bal:,.0f}" if cum_bal >= 0 else f"- {abs(cum_bal):,.0f}"
+                fmt_inc = f"+{inc:,.0f}" if inc > 0 else "0"
+                fmt_exp = f"- {abs(exp):,.0f}" if exp < 0 else "0"
+
+                tip_text = (
+                    f"{dt.strftime('%Y/%m/%d')}\n"
+                    f"{sign_bal}\n"
+                    f"{fmt_inc} | {fmt_exp}"
+                )
+
                 line_bal_points.append({
                     "x": exact_x,
                     "y": cum_bal,
-                    "tooltip": f"Balance: ¥{cum_bal:,.0f}\n+{inc:,.0f} | {exp:,.0f}\n{d_str}"
+                    "tooltip": tip_text
                 })
                 break
 
     # 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
+    # 折れ線のデータ点との座標衝突を防ぐため、柱の左右端をわずかにオフセット
     bar_inc_series: List[Dict[str, Any]] = []
     bar_exp_series: List[Dict[str, Any]] = []
+
+    EPSILON = 0.05  # 柱間の境界干渉・ホバー衝突を防ぐ微小マージン
 
     for idx, b in enumerate(bins):
         inc_val = b["income"]
         exp_val = b["expense"]  # 負の値
 
+        x_left = float(idx) + EPSILON
+        x_right = float(idx + 1) - EPSILON
+
         if inc_val > 0:
             bar_inc_series.append({
                 "points": [
-                    {"x": float(idx), "y": 0.0, "tooltip": None},
-                    {"x": float(idx), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
-                    {"x": float(idx + 1), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
-                    {"x": float(idx + 1), "y": 0.0, "tooltip": None},
+                    {"x": x_left, "y": 0.0},
+                    {"x": x_left, "y": inc_val},
+                    {"x": x_right, "y": inc_val},
+                    {"x": x_right, "y": 0.0},
                 ],
                 "val": inc_val
             })
@@ -220,10 +241,10 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
         if exp_val < 0:
             bar_exp_series.append({
                 "points": [
-                    {"x": float(idx), "y": 0.0, "tooltip": None},
-                    {"x": float(idx), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
-                    {"x": float(idx + 1), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
-                    {"x": float(idx + 1), "y": 0.0, "tooltip": None},
+                    {"x": x_left, "y": 0.0},
+                    {"x": x_left, "y": exp_val},
+                    {"x": x_right, "y": exp_val},
+                    {"x": x_right, "y": 0.0},
                 ],
                 "val": exp_val
             })

@@ -3,10 +3,12 @@ ui/views/timeline_dialog.py
 
 【このコードの目的・機能・挙動】
 Analysis画面の「Timeline」ダイアログモジュールです。
-LineChart 1つに完全統合し、各柱の内部のみを安全に塗りつぶします。
-- 支出: X軸（0円ライン）から下へ伸びる半透明オレンジ色の柱
-- 収入: X軸（0円ライン）から上へ伸びる半透明緑色の柱
-- 収支(Balance): 最前面を横断するシアン色の累積折れ線グラフ
+LineChart 1つに完全統合し、柱の内部のみを安全に塗りつぶしつつ、
+ホバー時の視覚フィードバック（細い縦線1本・小さな選択点1つ・安定した要約カード）を提供します。
+
+- 支出: X軸（0円ライン）から下へ伸びる半透明オレンジ色の柱（ホバー縦線は完全透明化）
+- 収入: X軸（0円ライン）から上へ伸びる半透明緑色の柱（ホバー縦線は完全透明化）
+- 収支(Balance): 最前面を横断するシアン色の折れ線グラフ（ホバー有効・小さな選択点1つ・細い縦線1本）
 """
 
 import asyncio
@@ -25,7 +27,6 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
     if not t_data:
         return
 
-    # 正しいキー名で受け取る
     bar_inc_series = t_data["bar_inc_series"]
     bar_exp_series = t_data["bar_exp_series"]
     line_bal_points = t_data["line_bal_points"]
@@ -38,20 +39,24 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
     show_bal = True
 
     # --------------------------------------------------------------------------
-    # 単一LineChartコンポーネント
+    # 単一LineChartコンポーネント（標準仕様のみで構成）
     # --------------------------------------------------------------------------
     chart = fch.LineChart(
         expand=True,
         border=ft.Border.all(1, ft.Colors.GREY_800),
+        vertical_grid_lines=fch.ChartGridLines(
+            color=ft.Colors.with_opacity(0.18, ft.Colors.CYAN_100),
+            width=1.0,
+        ),
         left_axis=fch.ChartAxis(
             label_size=55,
             title=ft.Text("金額 (¥)"),
-            title_size=14
+            title_size=14,
         ),
         bottom_axis=fch.ChartAxis(
             label_size=40,
             title=ft.Text(f"期間 ({bin_mode})"),
-            title_size=14
+            title_size=14,
         ),
         top_axis=None,
         right_axis=None,
@@ -60,7 +65,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
     summary_row = ft.Row(
         wrap=True,
         alignment=ft.MainAxisAlignment.CENTER,
-        spacing=10
+        spacing=10,
     )
 
     def update_graph(e: ft.ControlEvent = None):
@@ -84,7 +89,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         btn_bal.style = ft.ButtonStyle(color=ft.Colors.CYAN if show_bal else ft.Colors.GREY)
 
         # ----------------------------------------------------------------------
-        # スケール（Min Y / Max Y）の計算
+        # スケール（Min Y / Max Y）の計算（以前のキリの良い範囲にジャストフィット）
         # ----------------------------------------------------------------------
         y_values = [0.0]
         if show_inc:
@@ -108,11 +113,11 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.horizontal_grid_lines = fch.ChartGridLines(
             interval=y_interval,
             color=ft.Colors.with_opacity(0.12, ft.Colors.GREY),
-            width=1
+            width=1,
         )
 
         # ----------------------------------------------------------------------
-        # X軸目盛ラベル（期間境界に正確に配置）
+        # X軸目盛ラベル
         # ----------------------------------------------------------------------
         current_width = page.width if page.width else (page.window.width if page.window.width else 400)
         target_label_count = 4 if current_width < 500 else 7
@@ -130,47 +135,56 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
                             content=ft.Text(
                                 item["text"],
                                 size=9 if current_width < 500 else 10,
-                                weight=ft.FontWeight.BOLD
-                            )
-                        )
+                                weight=ft.FontWeight.BOLD,
+                            ),
+                        ),
                     )
                 )
         chart.bottom_axis.labels = chart_labels
 
         # ----------------------------------------------------------------------
-        # 系列データ構築（柱の内部のみ塗りつぶし）
+        # 系列データ構築（柱の内部のみ塗りつぶし & 縦線透明化）
         # ----------------------------------------------------------------------
         series_list = []
-        
-        # 1. 収入の柱（0円から上のみを緑で塗る）
+
+        invisible_point = fch.ChartCirclePoint(
+            radius=0,
+            color=ft.Colors.TRANSPARENT,
+        )
+
+        # 1. 収入の柱
         if show_inc:
             for item in bar_inc_series:
-                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"]) for p in item["points"]]
+                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=None) for p in item["points"]]
                 series_list.append(
                     fch.LineChartData(
                         pts,
-                        color=ft.Colors.with_opacity(0.6, ft.Colors.GREEN),
-                        stroke_width=1.5,
+                        color=ft.Colors.TRANSPARENT,
+                        stroke_width=0,
                         below_line_bgcolor=ft.Colors.with_opacity(0.35, ft.Colors.GREEN),
-                        below_line_cutoff_y=0.0,  # cut_off_y ではなく cutoff_y に修正
+                        below_line_cutoff_y=0.0,
+                        point=invisible_point,
+                        selected_point=invisible_point,
                     )
                 )
 
-        # 2. 支出の柱（0円から下のみをオレンジで塗る）
+        # 2. 支出の柱
         if show_exp:
             for item in bar_exp_series:
-                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"]) for p in item["points"]]
+                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=None) for p in item["points"]]
                 series_list.append(
                     fch.LineChartData(
                         pts,
-                        color=ft.Colors.with_opacity(0.6, ft.Colors.ORANGE_ACCENT),
-                        stroke_width=1.5,
+                        color=ft.Colors.TRANSPARENT,
+                        stroke_width=0,
                         above_line_bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.ORANGE_ACCENT),
-                        above_line_cutoff_y=0.0,  # cut_off_y ではなく cutoff_y に修正
+                        above_line_cutoff_y=0.0,
+                        point=invisible_point,
+                        selected_point=invisible_point,
                     )
                 )
 
-        # 3. 収支（Balance）折れ線（最前面）
+        # 3. 収支（Balance）折れ線
         if show_bal and line_bal_points:
             bal_data_points = [
                 fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
@@ -181,13 +195,18 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
                     bal_data_points,
                     color=ft.Colors.CYAN_ACCENT_400,
                     stroke_width=2.5 if current_width < 500 else 3.0,
+                    point=invisible_point,
+                    selected_point=fch.ChartCirclePoint(
+                        radius=3.5,
+                        color=ft.Colors.CYAN_ACCENT_100,
+                    ),
                 )
             )
 
         chart.data_series = series_list
 
         # ----------------------------------------------------------------------
-        # サマリー情報更新
+        # 全体サマリー行の更新
         # ----------------------------------------------------------------------
         summary_row.controls.clear()
         if show_bal and line_bal_points:
@@ -209,7 +228,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         controls=[btn_inc, btn_exp, btn_bal],
         alignment=ft.MainAxisAlignment.CENTER,
         wrap=True,
-        spacing=5
+        spacing=5,
     )
 
     async def close_timeline(e: ft.ControlEvent):
@@ -222,7 +241,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
 
     win_w = page.width if page.width else (page.window.width if page.window.width else 400)
     win_h = page.height if page.height else (page.window.height if page.window.height else 700)
-    dialog_width = min(800, int(win_w * 0.95))
+    dialog_width = min(820, int(win_w * 0.95))
     dialog_height = min(560, int(win_h * 0.85))
 
     timeline_dialog = ft.AlertDialog(
@@ -230,15 +249,18 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         content=ft.Container(
             width=dialog_width,
             height=dialog_height,
-            content=ft.Column([
-                button_row,
-                summary_row,
-                ft.Container(chart, expand=True, padding=ft.Padding.only(top=5, right=10))
-            ])
+            content=ft.Column(
+                controls=[
+                    button_row,
+                    summary_row,
+                    ft.Container(chart, expand=True, padding=ft.Padding.only(top=5, right=10)),
+                ],
+                spacing=4,
+            ),
         ),
         actions=[
-            ft.TextButton("閉じる", on_click=close_timeline)
-        ]
+            ft.TextButton("閉じる", on_click=close_timeline),
+        ],
     )
 
     page.overlay.append(timeline_dialog)
