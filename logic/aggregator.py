@@ -3,13 +3,8 @@ logic/aggregator.py
 
 【このコードの目的・機能・挙動】
 UI（Flet）から独立して動作する集計・統計計算モジュールです。
-LineChart単一統合向けに、以下の計算を担当します。
-1. サマリー計算（calculate_summary）
-2. 円グラフ内訳計算（calculate_category_breakdown）
-3. 単一LineChart用タイムラインデータ生成（calculate_timeline_data）:
-   - 収入: 各区間 [i, i+1] の矩形ステップ点群（0 -> +Inc -> +Inc -> 0）
-   - 支出: 各区間 [i, i+1] の矩形ステップ点群（0 -> -Exp -> -Exp -> 0）
-   - 収支(Balance): 各日の累積残高を区間内の正確な小数X座標にマッピング
+LineChart単一統合向けに、各柱を独立した矩形（4点）として算出し、
+0円ラインから柱の内部のみを安全に塗りつぶすためのデータを生成します。
 """
 
 import math
@@ -95,9 +90,7 @@ def calculate_nice_interval(raw_min_y: float, raw_max_y: float, target_steps: in
 
 
 def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
-    """
-    LineChart単一統合用の座標データを生成する。
-    """
+    """LineChart単一統合用の座標データを生成する"""
     if not data_rows:
         return {}
 
@@ -110,7 +103,6 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     end_dt = to_date(sorted_rows[-1][0])
     total_days = (end_dt - start_dt).days + 1
 
-    # 期間に応じたビニング単位の決定
     if total_days <= 31:
         bin_mode = "daily"
     elif total_days <= 180:
@@ -138,7 +130,7 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
 
     unique_dates = sorted(daily_summary.keys())
 
-    # ビン区間の生成（開始日・終了日・ラベル）
+    # ビン区間の生成
     bins: List[Dict[str, Any]] = []
     curr = start_dt
 
@@ -180,7 +172,7 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
             })
             curr = next_day
 
-    # 各レコードを該当ビンに積算し、Balanceの連続座標を算出
+    # 各日付のデータを該当するビンに割り当て & Balance連続座標計算
     cum_bal = 0.0
     line_bal_points: List[Dict[str, Any]] = []
 
@@ -195,7 +187,6 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
                 b["income"] += inc
                 b["expense"] += exp  # 負の値
 
-                # 区間内の精密なX座標 (idx + 経過割合)
                 bin_duration = (b["end"] - b["start"]).total_seconds()
                 offset = (dt - b["start"]).total_seconds()
                 exact_x = idx + (offset / bin_duration)
@@ -207,36 +198,41 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
                 })
                 break
 
-    # 柱状ステップ面用のポイント作成 (区間 [i, i+1] を矩形として表現)
-    step_inc_points: List[Dict[str, Any]] = []
-    step_exp_points: List[Dict[str, Any]] = []
+    # 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
+    bar_inc_series: List[Dict[str, Any]] = []
+    bar_exp_series: List[Dict[str, Any]] = []
 
     for idx, b in enumerate(bins):
         inc_val = b["income"]
         exp_val = b["expense"]  # 負の値
 
-        # 収入柱 (0 -> Inc -> Inc -> 0)
-        step_inc_points.extend([
-            {"x": float(idx), "y": 0.0, "tooltip": None},
-            {"x": float(idx), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
-            {"x": float(idx + 1), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
-            {"x": float(idx + 1), "y": 0.0, "tooltip": None},
-        ])
+        if inc_val > 0:
+            bar_inc_series.append({
+                "points": [
+                    {"x": float(idx), "y": 0.0, "tooltip": None},
+                    {"x": float(idx), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
+                    {"x": float(idx + 1), "y": inc_val, "tooltip": f"収入: +¥{inc_val:,.0f}\n{b['label']}"},
+                    {"x": float(idx + 1), "y": 0.0, "tooltip": None},
+                ],
+                "val": inc_val
+            })
 
-        # 支出柱 (0 -> Exp -> Exp -> 0)
-        step_exp_points.extend([
-            {"x": float(idx), "y": 0.0, "tooltip": None},
-            {"x": float(idx), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
-            {"x": float(idx + 1), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
-            {"x": float(idx + 1), "y": 0.0, "tooltip": None},
-        ])
+        if exp_val < 0:
+            bar_exp_series.append({
+                "points": [
+                    {"x": float(idx), "y": 0.0, "tooltip": None},
+                    {"x": float(idx), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
+                    {"x": float(idx + 1), "y": exp_val, "tooltip": f"支出: ¥{exp_val:,.0f}\n{b['label']}"},
+                    {"x": float(idx + 1), "y": 0.0, "tooltip": None},
+                ],
+                "val": exp_val
+            })
 
-    # ラベル情報
     labels_info = [{"value": idx, "text": b["label"]} for idx, b in enumerate(bins)]
 
     return {
-        "step_inc_points": step_inc_points,
-        "step_exp_points": step_exp_points,
+        "bar_inc_series": bar_inc_series,
+        "bar_exp_series": bar_exp_series,
         "line_bal_points": line_bal_points,
         "labels_info": labels_info,
         "bin_count": len(bins),

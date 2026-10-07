@@ -3,15 +3,10 @@ ui/views/timeline_dialog.py
 
 【このコードの目的・機能・挙動】
 Analysis画面の「Timeline」ダイアログモジュールです。
-BarChartを完全撤廃し、単一のLineChartに統合したアーキテクチャです。
-- 支出: X軸（0円ライン）から下へ伸びる半透明オレンジ色のステップ面
-- 収入: X軸（0円ライン）から上へ伸びる半透明緑色のステップ面
+LineChart 1つに完全統合し、各柱の内部のみを安全に塗りつぶします。
+- 支出: X軸（0円ライン）から下へ伸びる半透明オレンジ色の柱
+- 収入: X軸（0円ライン）から上へ伸びる半透明緑色の柱
 - 収支(Balance): 最前面を横断するシアン色の累積折れ線グラフ
-
-【単一チャート化による利点】
-1. 座標の完全一致: 同一キャンバスのため、X軸・Y軸の原点・端点・境界線が100%一致。
-2. ラベル重複の根絶: 軸が1組しか存在しないため、数字や日付の二重描画が発生しない。
-3. レスポンシブ完全自動対応: 端末の画面幅変化にFlutter描画エンジンが自動追従。
 """
 
 import asyncio
@@ -30,8 +25,9 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
     if not t_data:
         return
 
-    step_inc_points = t_data["step_inc_points"]
-    step_exp_points = t_data["step_exp_points"]
+    # 正しいキー名で受け取る
+    bar_inc_series = t_data["bar_inc_series"]
+    bar_exp_series = t_data["bar_exp_series"]
     line_bal_points = t_data["line_bal_points"]
     labels_info = t_data["labels_info"]
     bin_count = t_data["bin_count"]
@@ -92,9 +88,11 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         # ----------------------------------------------------------------------
         y_values = [0.0]
         if show_inc:
-            y_values.extend([p["y"] for p in step_inc_points])
+            for item in bar_inc_series:
+                y_values.append(item["val"])
         if show_exp:
-            y_values.extend([p["y"] for p in step_exp_points])
+            for item in bar_exp_series:
+                y_values.append(item["val"])
         if show_bal:
             y_values.extend([p["y"] for p in line_bal_points])
 
@@ -107,7 +105,6 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.min_x = 0
         chart.max_x = bin_count
 
-        # 横グリッド線
         chart.horizontal_grid_lines = fch.ChartGridLines(
             interval=y_interval,
             color=ft.Colors.with_opacity(0.12, ft.Colors.GREY),
@@ -141,39 +138,37 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.bottom_axis.labels = chart_labels
 
         # ----------------------------------------------------------------------
-        # 系列データ構築（背面: 収入・支出の面塗り、前面: 収支の折れ線）
+        # 系列データ構築（柱の内部のみ塗りつぶし）
         # ----------------------------------------------------------------------
         series_list = []
-
-        # 1. 収入の柱（緑の面塗り）
-        if show_inc and step_inc_points:
-            inc_data_points = [
-                fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
-                for p in step_inc_points
-            ]
-            series_list.append(
-                fch.LineChartData(
-                    inc_data_points,
-                    color=ft.Colors.with_opacity(0.40, ft.Colors.GREEN),
-                    stroke_width=1,
-                    below_line_bgcolor=ft.Colors.with_opacity(0.35, ft.Colors.GREEN),
+        
+        # 1. 収入の柱（0円から上のみを緑で塗る）
+        if show_inc:
+            for item in bar_inc_series:
+                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"]) for p in item["points"]]
+                series_list.append(
+                    fch.LineChartData(
+                        pts,
+                        color=ft.Colors.with_opacity(0.6, ft.Colors.GREEN),
+                        stroke_width=1.5,
+                        below_line_bgcolor=ft.Colors.with_opacity(0.35, ft.Colors.GREEN),
+                        below_line_cutoff_y=0.0,  # cut_off_y ではなく cutoff_y に修正
+                    )
                 )
-            )
 
-        # 2. 支出の柱（オレンジの面塗り）
-        if show_exp and step_exp_points:
-            exp_data_points = [
-                fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
-                for p in step_exp_points
-            ]
-            series_list.append(
-                fch.LineChartData(
-                    exp_data_points,
-                    color=ft.Colors.with_opacity(0.40, ft.Colors.ORANGE_ACCENT),
-                    stroke_width=1,
-                    above_line_bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.ORANGE_ACCENT),
+        # 2. 支出の柱（0円から下のみをオレンジで塗る）
+        if show_exp:
+            for item in bar_exp_series:
+                pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"]) for p in item["points"]]
+                series_list.append(
+                    fch.LineChartData(
+                        pts,
+                        color=ft.Colors.with_opacity(0.6, ft.Colors.ORANGE_ACCENT),
+                        stroke_width=1.5,
+                        above_line_bgcolor=ft.Colors.with_opacity(0.40, ft.Colors.ORANGE_ACCENT),
+                        above_line_cutoff_y=0.0,  # cut_off_y ではなく cutoff_y に修正
+                    )
                 )
-            )
 
         # 3. 収支（Balance）折れ線（最前面）
         if show_bal and line_bal_points:
@@ -206,9 +201,9 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         if e:
             timeline_dialog.update()
 
-    btn_inc = ft.TextButton("Income (面)", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
-    btn_exp = ft.TextButton("Expense (面)", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
-    btn_bal = ft.TextButton("Balance (線)", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
+    btn_inc = ft.TextButton("In", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="inc")
+    btn_exp = ft.TextButton("Ex", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="exp")
+    btn_bal = ft.TextButton("Bal", icon=ft.Icons.CHECK_BOX, on_click=update_graph, data="bal")
 
     button_row = ft.Row(
         controls=[btn_inc, btn_exp, btn_bal],
