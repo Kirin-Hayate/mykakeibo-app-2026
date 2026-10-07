@@ -5,10 +5,11 @@ logic/aggregator.py
 UI（Flet）から独立して動作する集計・統計計算モジュールです。
 LineChart単一統合向けに、各柱を独立した矩形（4点）として算出し、
 0円ラインから柱の内部のみを安全に塗りつぶすためのデータを生成します。
-また、Balance折れ線上のホバーツールチップ向けに以下の3行フォーマットを生成します:
-  1行目: 選択日の日付 (YYYY/MM/DD)
-  2行目: 選択日までの累計収支 (+/- 符号付き)
-  3行目: 選択日の収入 | 選択日の支出 (+/- 符号付き)
+
+【ダウンサンプリング機能】
+表示期間が長期間（monthly/weekly）になった際、折れ線のデータ点密度が高すぎて
+ホバー判定がすり抜ける問題を解消するため、画面解像度に合わせて適切な点数（40〜80点）
+に折れ線の描画点列を動的リサンプリングします。
 """
 
 import math
@@ -176,9 +177,9 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
             })
             curr = next_day
 
-    # 各日付のデータを該当するビンに割り当て & Balance連続座標計算
+    # 各日付のデータをビンに集計し、全日ポイントを一時収集
     cum_bal = 0.0
-    line_bal_points: List[Dict[str, Any]] = []
+    all_raw_points: List[Dict[str, Any]] = []
 
     for d_str in unique_dates:
         dt = to_date(d_str)
@@ -189,40 +190,74 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
         for idx, b in enumerate(bins):
             if b["start"] <= dt < b["end"]:
                 b["income"] += inc
-                b["expense"] += exp  # 負の値
+                b["expense"] += exp
 
                 bin_duration = (b["end"] - b["start"]).total_seconds()
                 offset = (dt - b["start"]).total_seconds()
                 exact_x = idx + (offset / bin_duration)
 
-                # ツールチップの書式整形（3行表示）
                 sign_bal = f"+{cum_bal:,.0f}" if cum_bal >= 0 else f"- {abs(cum_bal):,.0f}"
                 fmt_inc = f"+{inc:,.0f}" if inc > 0 else "0"
                 fmt_exp = f"- {abs(exp):,.0f}" if exp < 0 else "0"
 
-                tip_text = (
-                    f"{dt.strftime('%Y/%m/%d')}\n"
-                    f"{sign_bal}\n"
-                    f"{fmt_inc} | {fmt_exp}"
-                )
+                tip_text = f"{dt.strftime('%Y/%m/%d')}\n収支: {sign_bal}\n+{fmt_inc} | {fmt_exp}"
 
-                line_bal_points.append({
+                all_raw_points.append({
                     "x": exact_x,
                     "y": cum_bal,
-                    "tooltip": tip_text
+                    "tooltip": tip_text,
+                    "bin_idx": idx,
+                    "dt": dt
                 })
                 break
 
+    # --------------------------------------------------------------------------
+    # 折れ線データ点の動的ダウンサンプリング
+    # --------------------------------------------------------------------------
+    # 画面上のヒット判定が確実に機能する理想の点数（40〜60点）になるよう間引く
+    line_bal_points: List[Dict[str, Any]] = []
+    total_raw = len(all_raw_points)
+
+    if total_raw <= 60 or bin_mode == "daily":
+        # 点数が少ないか日別モードなら全点を採用
+        line_bal_points = all_raw_points
+    else:
+        # 長期間モード: 各ビン（月/週）から「中旬」と「末尾」など最大2〜3点を抽出
+        # さらに、始点と終点は必ず保持する
+        grouped_by_bin: Dict[int, List[Dict[str, Any]]] = {}
+        for p in all_raw_points:
+            b_idx = p["bin_idx"]
+            grouped_by_bin.setdefault(b_idx, []).append(p)
+
+        for b_idx in sorted(grouped_by_bin.keys()):
+            pts_in_bin = grouped_by_bin[b_idx]
+            count = len(pts_in_bin)
+            if count <= 2:
+                line_bal_points.extend(pts_in_bin)
+            else:
+                # 複数点ある場合は中央付近の点と最終日を残す
+                mid_pt = pts_in_bin[count // 2]
+                last_pt = pts_in_bin[-1]
+                line_bal_points.extend([mid_pt, last_pt])
+
+        # 始点と終点が確実に含まれるように保証
+        if all_raw_points and line_bal_points:
+            if line_bal_points[0] != all_raw_points[0]:
+                line_bal_points.insert(0, all_raw_points[0])
+            if line_bal_points[-1] != all_raw_points[-1]:
+                line_bal_points.append(all_raw_points[-1])
+
+    # --------------------------------------------------------------------------
     # 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
-    # 折れ線のデータ点との座標衝突を防ぐため、柱の左右端をわずかにオフセット
+    # --------------------------------------------------------------------------
     bar_inc_series: List[Dict[str, Any]] = []
     bar_exp_series: List[Dict[str, Any]] = []
 
-    EPSILON = 0.05  # 柱間の境界干渉・ホバー衝突を防ぐ微小マージン
+    EPSILON = 0.04  # 折れ線との境界干渉を防ぐ微小マージン
 
     for idx, b in enumerate(bins):
         inc_val = b["income"]
-        exp_val = b["expense"]  # 負の値
+        exp_val = b["expense"]
 
         x_left = float(idx) + EPSILON
         x_right = float(idx + 1) - EPSILON
