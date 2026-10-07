@@ -6,9 +6,11 @@ UI（Flet）から独立して動作する集計・統計計算モジュール�
 LineChart単一統合向けに、各柱を独立した矩形（4点）として算出し、
 0円ラインから柱の内部のみを安全に塗りつぶすためのデータを生成します。
 
-【高精細描画とダウンサンプリングの分離】
-- full_bal_points: 全データ点（日々のスパイクや歴代最高値/最低値を100%保持した描画用）
-- hit_points: ダウンサンプリング点列（40〜60点 ＋ 最高値・最低値・始終点を確実に保持した当たり判定用）
+【折れ線の単一系統統合 ＆ ツールチップ動的間引き】
+- 折れ線自体は全取引日（スパイク・歴代最高値・歴代最低値を含む）を100%保持して描画。
+- ツールチップ（要約カード）は、ダウンサンプリングによって選定された40〜60点、
+  および歴代最高値・最低値・始終点にのみ文字列を設定し、中間点には tooltip=None を設定。
+- これにより、系列同士の競合や描画スキップを防ぎ、ホバー判定の安定性と高精細な描画を両立します。
 """
 
 import math
@@ -176,9 +178,9 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
             })
             curr = next_day
 
-    # 全日ポイントの生成（高精細な折れ線描画用）
+    # 1. 全日ポイントの連続計算（折れ線自体の幾何学的完全性を担保）
     cum_bal = 0.0
-    full_bal_points: List[Dict[str, Any]] = []
+    raw_bal_points: List[Dict[str, Any]] = []
 
     for d_str in unique_dates:
         dt = to_date(d_str)
@@ -201,57 +203,60 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
 
                 tip_text = f"{dt.strftime('%Y/%m/%d')}\n収支: {sign_bal}\n+{fmt_inc} | {fmt_exp}"
 
-                full_bal_points.append({
+                raw_bal_points.append({
                     "x": exact_x,
                     "y": cum_bal,
-                    "tooltip": tip_text,
+                    "tooltip_text": tip_text,
                     "bin_idx": idx,
                 })
                 break
 
-    # --------------------------------------------------------------------------
-    # 当たり判定専用の点列抽出（ダウンサンプリング ＋ 最大値・最小値の厳密保証）
-    # --------------------------------------------------------------------------
-    hit_points: List[Dict[str, Any]] = []
-    total_raw = len(full_bal_points)
+    # 2. ツールチップ有効点の選定（サンプリング ＋ 最大値・最小値の厳密保持）
+    active_indices = set()
+    total_raw = len(raw_bal_points)
 
     if total_raw <= 60 or bin_mode == "daily":
-        hit_points = list(full_bal_points)
+        active_indices = set(range(total_raw))
     else:
-        grouped: Dict[int, List[Dict[str, Any]]] = {}
-        for p in full_bal_points:
-            grouped.setdefault(p["bin_idx"], []).append(p)
+        # 各ビンから代表点（中央・末尾）を抽出
+        bin_to_indices: Dict[int, List[int]] = {}
+        for i, pt in enumerate(raw_bal_points):
+            bin_to_indices.setdefault(pt["bin_idx"], []).append(i)
 
-        selected_set = set()
-        for b_idx in sorted(grouped.keys()):
-            pts = grouped[b_idx]
-            count = len(pts)
+        for b_idx in sorted(bin_to_indices.keys()):
+            indices = bin_to_indices[b_idx]
+            count = len(indices)
             if count <= 2:
-                for pt in pts:
-                    selected_set.add(pt["x"])
+                active_indices.update(indices)
             else:
-                selected_set.add(pts[count // 2]["x"])
-                selected_set.add(pts[-1]["x"])
+                active_indices.add(indices[count // 2])
+                active_indices.add(indices[-1])
 
-        # 歴代最高値（Max）・最低値（Min）の点を必ず当たり判定に含める
-        max_pt = max(full_bal_points, key=lambda p: p["y"])
-        min_pt = min(full_bal_points, key=lambda p: p["y"])
-        selected_set.add(max_pt["x"])
-        selected_set.add(min_pt["x"])
+        # 歴代最高値（Max）・最低値（Min）のインデックスを必ず含める
+        max_idx = max(range(total_raw), key=lambda i: raw_bal_points[i]["y"])
+        min_idx = min(range(total_raw), key=lambda i: raw_bal_points[i]["y"])
+        active_indices.add(max_idx)
+        active_indices.add(min_idx)
 
-        # 始点・終点
-        selected_set.add(full_bal_points[0]["x"])
-        selected_set.add(full_bal_points[-1]["x"])
+        # 始点と終点も含める
+        active_indices.add(0)
+        active_indices.add(total_raw - 1)
 
-        hit_points = [p for p in full_bal_points if p["x"] in selected_set]
+    # 3. 単一折れ線用の最終データ点リストを作成
+    # （選定された点のみ tooltip を持たせ、それ以外は None にして判定競合を回避）
+    line_bal_points: List[Dict[str, Any]] = []
+    for i, pt in enumerate(raw_bal_points):
+        line_bal_points.append({
+            "x": pt["x"],
+            "y": pt["y"],
+            "tooltip": pt["tooltip_text"] if i in active_indices else None,
+        })
 
-    # --------------------------------------------------------------------------
-    # 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
-    # --------------------------------------------------------------------------
+    # 4. 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
     bar_inc_series: List[Dict[str, Any]] = []
     bar_exp_series: List[Dict[str, Any]] = []
 
-    EPSILON = 0.04
+    EPSILON = 0.04  # 折れ線との境界干渉・ホバー衝突を防ぐマージン
 
     for idx, b in enumerate(bins):
         inc_val = b["income"]
@@ -287,9 +292,7 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     return {
         "bar_inc_series": bar_inc_series,
         "bar_exp_series": bar_exp_series,
-        "full_bal_points": full_bal_points,
-        "hit_points": hit_points,
-        "line_bal_points": full_bal_points,  # 互換性保持用エイリアス
+        "line_bal_points": line_bal_points,
         "labels_info": labels_info,
         "bin_count": len(bins),
         "bin_mode": bin_mode
