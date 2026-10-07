@@ -17,7 +17,7 @@ UI（Flet）から独立して動作する、純粋な集計・統計計算モ�
 """
 
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Tuple
 
 
@@ -112,7 +112,8 @@ def calculate_nice_interval(raw_min_y: float, raw_max_y: float, target_steps: in
 
 def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     """
-    推移グラフ用に、日別の累積データとX軸/Y軸の描画パラメータを計算して返す。
+    推移グラフ用に、期間長に応じたビン（日/週/月）ごとの支出(負)・収入(正)の棒グラフデータと、
+    累積Balanceの折れ線データを計算して返す。
     """
     if not data_rows:
         return {}
@@ -120,7 +121,38 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     # 1. 日付順にソート
     sorted_rows = sorted(data_rows, key=lambda x: x[0])
 
-    # 2. 日付ごとに集計
+    def to_date(date_str: str) -> datetime:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+
+    start_dt = to_date(sorted_rows[0][0])
+    end_dt = to_date(sorted_rows[-1][0])
+    total_days = (end_dt - start_dt).days + 1
+
+    # 2. 期間に応じたビニング（集計単位）の決定
+    # - 31日以下: 日次 (Daily)
+    # - 180日以下: 週次 (Weekly)
+    # - それ以上: 月次 (Monthly)
+    if total_days <= 31:
+        bin_mode = "daily"
+    elif total_days <= 180:
+        bin_mode = "weekly"
+    else:
+        bin_mode = "monthly"
+
+    # 日付からビンのキー（YYYY-MM-DD または代表日）とラベルを返すヘルパー
+    def get_bin_info(dt: datetime) -> Tuple[datetime, str]:
+        if bin_mode == "daily":
+            return dt, dt.strftime("%m/%d")
+        elif bin_mode == "weekly":
+            # 週の月曜日を代表日とする
+            mon = dt - timedelta(days=dt.weekday())
+            return mon, mon.strftime("%m/%d")
+        else:
+            # 月の1日を代表日とする
+            first_day = datetime(dt.year, dt.month, 1)
+            return first_day, first_day.strftime("%Y/%m")
+
+    # 3. 日別集計と累積Balanceの計算
     daily_summary: Dict[str, Dict[str, float]] = {}
     for row in sorted_rows:
         d = row[0]
@@ -138,57 +170,75 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
         elif mode == "Expense":
             daily_summary[d]["expense"] += val
 
-    dates = sorted(daily_summary.keys())
-    if not dates:
-        return {}
+    # 全期間の日付リスト
+    unique_dates = sorted(daily_summary.keys())
+    cum_bal = 0.0
+    balance_points = []  # LineChart用
 
-    def to_ts(date_str: str) -> float:
-        return datetime.strptime(date_str, "%Y-%m-%d").timestamp()
+    # 棒グラフ用のビン集計
+    bin_summary: Dict[datetime, Dict[str, Any]] = {}
 
-    min_x = to_ts(dates[0])
-    max_x = to_ts(dates[-1])
-    day_seconds = 24 * 60 * 60
-
-    if max_x == min_x:
-        max_x += day_seconds
-
-    cum_inc, cum_exp, cum_bal = 0.0, 0.0, 0.0
-    points_inc, points_exp, points_bal = [], [], []
-
-    for d in dates:
-        inc = daily_summary[d]["income"]
-        exp = daily_summary[d]["expense"]
-
-        cum_inc += inc
-        cum_exp += abs(exp)  # 支出は絶対値で累積
+    for d_str in unique_dates:
+        dt = to_date(d_str)
+        inc = daily_summary[d_str]["income"]
+        exp = daily_summary[d_str]["expense"]
         cum_bal += (inc + exp)
 
-        ts = to_ts(d)
-        rel_x = ts - min_x  # 開始日を0秒とする相対X座標
+        # 折れ線グラフ用（日次累積）
+        balance_points.append({
+            "date": d_str,
+            "cum_bal": cum_bal,
+            "inc": inc,
+            "exp": exp,
+            "dt": dt
+        })
 
-        points_inc.append({"x": rel_x, "y": cum_inc, "tooltip": f"+{cum_inc:,.0f}|+{inc:,.0f}"})
-        points_exp.append({"x": rel_x, "y": cum_exp, "tooltip": f"-{cum_exp:,.0f}|-{abs(exp):,.0f}"})
-        points_bal.append({"x": rel_x, "y": cum_bal, "tooltip": f"{cum_bal:,.0f}|{inc + exp:,.0f} \n {d}"})
+        # 棒グラフ用ビニング
+        bin_dt, label = get_bin_info(dt)
+        if bin_dt not in bin_summary:
+            bin_summary[bin_dt] = {"income": 0.0, "expense": 0.0, "label": label}
+        bin_summary[bin_dt]["income"] += inc
+        bin_summary[bin_dt]["expense"] += exp  # 支出は負の値
 
-    # X軸の間引き間隔決定
-    duration = max_x - min_x
-    if duration <= 14 * day_seconds:
-        x_interval = day_seconds
-        date_fmt = "%m/%d"
-    elif duration <= 90 * day_seconds:
-        x_interval = 7 * day_seconds
-        date_fmt = "%m/%d"
+    # 棒グラフ用のインデックス座標変換
+    sorted_bins = sorted(bin_summary.keys())
+    bar_groups = []
+    
+    # 棒グラフのX座標インデックス (0, 1, 2, ...)
+    for idx, b_dt in enumerate(sorted_bins):
+        b_data = bin_summary[b_dt]
+        bar_groups.append({
+            "x": idx,
+            "income": b_data["income"],
+            "expense": b_data["expense"],  # 負の値
+            "label": b_data["label"],
+            "dt": b_dt
+        })
+
+    # 折れ線グラフのX座標を棒グラフのインデックススケールに正規化
+    # 棒グラフの各ビン代表日からの相対位置でマッピング
+    norm_line_points = []
+    if len(sorted_bins) == 1:
+        for p in balance_points:
+            norm_line_points.append({"x": 0.0, "y": p["cum_bal"], "tooltip": f"Balance: ¥{p['cum_bal']:,.0f}\n{p['date']}"})
     else:
-        x_interval = 30 * day_seconds
-        date_fmt = "%Y/%m"
+        min_bin_ts = sorted_bins[0].timestamp()
+        max_bin_ts = sorted_bins[-1].timestamp()
+        ts_span = max_bin_ts - min_bin_ts if max_bin_ts != min_bin_ts else 1.0
+        max_idx = len(sorted_bins) - 1
+
+        for p in balance_points:
+            cur_ts = p["dt"].timestamp()
+            rel_x = ((cur_ts - min_bin_ts) / ts_span) * max_idx
+            norm_line_points.append({
+                "x": rel_x,
+                "y": p["cum_bal"],
+                "tooltip": f"Balance: ¥{p['cum_bal']:,.0f}\n+{p['inc']:,.0f} | {p['exp']:,.0f}\n{p['date']}"
+            })
 
     return {
-        "min_x": 0,
-        "max_x": max_x - min_x,
-        "min_ts": min_x,
-        "x_interval": x_interval,
-        "date_fmt": date_fmt,
-        "points_inc": points_inc,
-        "points_exp": points_exp,
-        "points_bal": points_bal,
+        "bar_groups": bar_groups,
+        "line_points": norm_line_points,
+        "bin_count": len(sorted_bins),
+        "bin_mode": bin_mode
     }
