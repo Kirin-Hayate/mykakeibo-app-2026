@@ -6,10 +6,9 @@ UI（Flet）から独立して動作する集計・統計計算モジュール�
 LineChart単一統合向けに、各柱を独立した矩形（4点）として算出し、
 0円ラインから柱の内部のみを安全に塗りつぶすためのデータを生成します。
 
-【ダウンサンプリング機能】
-表示期間が長期間（monthly/weekly）になった際、折れ線のデータ点密度が高すぎて
-ホバー判定がすり抜ける問題を解消するため、画面解像度に合わせて適切な点数（40〜80点）
-に折れ線の描画点列を動的リサンプリングします。
+【高精細描画とダウンサンプリングの分離】
+- full_bal_points: 全データ点（日々のスパイクや歴代最高値/最低値を100%保持した描画用）
+- hit_points: ダウンサンプリング点列（40〜60点 ＋ 最高値・最低値・始終点を確実に保持した当たり判定用）
 """
 
 import math
@@ -177,9 +176,9 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
             })
             curr = next_day
 
-    # 各日付のデータをビンに集計し、全日ポイントを一時収集
+    # 全日ポイントの生成（高精細な折れ線描画用）
     cum_bal = 0.0
-    all_raw_points: List[Dict[str, Any]] = []
+    full_bal_points: List[Dict[str, Any]] = []
 
     for d_str in unique_dates:
         dt = to_date(d_str)
@@ -202,50 +201,49 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
 
                 tip_text = f"{dt.strftime('%Y/%m/%d')}\n収支: {sign_bal}\n+{fmt_inc} | {fmt_exp}"
 
-                all_raw_points.append({
+                full_bal_points.append({
                     "x": exact_x,
                     "y": cum_bal,
                     "tooltip": tip_text,
                     "bin_idx": idx,
-                    "dt": dt
                 })
                 break
 
     # --------------------------------------------------------------------------
-    # 折れ線データ点の動的ダウンサンプリング
+    # 当たり判定専用の点列抽出（ダウンサンプリング ＋ 最大値・最小値の厳密保証）
     # --------------------------------------------------------------------------
-    # 画面上のヒット判定が確実に機能する理想の点数（40〜60点）になるよう間引く
-    line_bal_points: List[Dict[str, Any]] = []
-    total_raw = len(all_raw_points)
+    hit_points: List[Dict[str, Any]] = []
+    total_raw = len(full_bal_points)
 
     if total_raw <= 60 or bin_mode == "daily":
-        # 点数が少ないか日別モードなら全点を採用
-        line_bal_points = all_raw_points
+        hit_points = list(full_bal_points)
     else:
-        # 長期間モード: 各ビン（月/週）から「中旬」と「末尾」など最大2〜3点を抽出
-        # さらに、始点と終点は必ず保持する
-        grouped_by_bin: Dict[int, List[Dict[str, Any]]] = {}
-        for p in all_raw_points:
-            b_idx = p["bin_idx"]
-            grouped_by_bin.setdefault(b_idx, []).append(p)
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
+        for p in full_bal_points:
+            grouped.setdefault(p["bin_idx"], []).append(p)
 
-        for b_idx in sorted(grouped_by_bin.keys()):
-            pts_in_bin = grouped_by_bin[b_idx]
-            count = len(pts_in_bin)
+        selected_set = set()
+        for b_idx in sorted(grouped.keys()):
+            pts = grouped[b_idx]
+            count = len(pts)
             if count <= 2:
-                line_bal_points.extend(pts_in_bin)
+                for pt in pts:
+                    selected_set.add(pt["x"])
             else:
-                # 複数点ある場合は中央付近の点と最終日を残す
-                mid_pt = pts_in_bin[count // 2]
-                last_pt = pts_in_bin[-1]
-                line_bal_points.extend([mid_pt, last_pt])
+                selected_set.add(pts[count // 2]["x"])
+                selected_set.add(pts[-1]["x"])
 
-        # 始点と終点が確実に含まれるように保証
-        if all_raw_points and line_bal_points:
-            if line_bal_points[0] != all_raw_points[0]:
-                line_bal_points.insert(0, all_raw_points[0])
-            if line_bal_points[-1] != all_raw_points[-1]:
-                line_bal_points.append(all_raw_points[-1])
+        # 歴代最高値（Max）・最低値（Min）の点を必ず当たり判定に含める
+        max_pt = max(full_bal_points, key=lambda p: p["y"])
+        min_pt = min(full_bal_points, key=lambda p: p["y"])
+        selected_set.add(max_pt["x"])
+        selected_set.add(min_pt["x"])
+
+        # 始点・終点
+        selected_set.add(full_bal_points[0]["x"])
+        selected_set.add(full_bal_points[-1]["x"])
+
+        hit_points = [p for p in full_bal_points if p["x"] in selected_set]
 
     # --------------------------------------------------------------------------
     # 柱ごとの独立した矩形点リスト作成（0 -> Y -> Y -> 0）
@@ -253,7 +251,7 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     bar_inc_series: List[Dict[str, Any]] = []
     bar_exp_series: List[Dict[str, Any]] = []
 
-    EPSILON = 0.04  # 折れ線との境界干渉を防ぐ微小マージン
+    EPSILON = 0.04
 
     for idx, b in enumerate(bins):
         inc_val = b["income"]
@@ -289,7 +287,9 @@ def calculate_timeline_data(data_rows: List[List[Any]]) -> Dict[str, Any]:
     return {
         "bar_inc_series": bar_inc_series,
         "bar_exp_series": bar_exp_series,
-        "line_bal_points": line_bal_points,
+        "full_bal_points": full_bal_points,
+        "hit_points": hit_points,
+        "line_bal_points": full_bal_points,  # 互換性保持用エイリアス
         "labels_info": labels_info,
         "bin_count": len(bins),
         "bin_mode": bin_mode

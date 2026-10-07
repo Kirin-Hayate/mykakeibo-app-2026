@@ -34,6 +34,9 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
     bin_count = t_data["bin_count"]
     bin_mode = t_data["bin_mode"]
 
+    full_bal_points = t_data["full_bal_points"]
+    hit_points = t_data["hit_points"]
+
     show_inc = True
     show_exp = True
     show_bal = True
@@ -143,7 +146,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.bottom_axis.labels = chart_labels
 
         # ----------------------------------------------------------------------
-        # 系列データ構築（柱の内部のみ塗りつぶし & 縦線透明化）
+        # 系列データ構築（2層折れ線アーキテクチャ）
         # ----------------------------------------------------------------------
         series_list = []
 
@@ -184,17 +187,27 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
                     )
                 )
 
-        # 3. 収支（Balance）折れ線
-        if show_bal and line_bal_points:
-            bal_data_points = [
-                fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
-                for p in line_bal_points
-            ]
+        # 3. 収支（Balance）の描画レイヤー（全点・最高値と最低値を完全描画・ホバー無効）
+        if show_bal and full_bal_points:
+            draw_pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=None) for p in full_bal_points]
             series_list.append(
                 fch.LineChartData(
-                    bal_data_points,
+                    draw_pts,
                     color=ft.Colors.CYAN_ACCENT_400,
                     stroke_width=2.5 if current_width < 500 else 3.0,
+                    point=invisible_point,
+                    selected_point=invisible_point,  # 描画用はホバーを拾わない
+                )
+            )
+
+        # 4. 収支（Balance）の当たり判定レイヤー（ダウンサンプリング点＋Max/Min・透明線・ホバー有効）
+        if show_bal and hit_points:
+            hit_pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"]) for p in hit_points]
+            series_list.append(
+                fch.LineChartData(
+                    hit_pts,
+                    color=ft.Colors.TRANSPARENT,  # 線自体は見せない
+                    stroke_width=0,
                     point=invisible_point,
                     selected_point=fch.ChartCirclePoint(
                         radius=3.5,
@@ -206,15 +219,15 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.data_series = series_list
 
         # ----------------------------------------------------------------------
-        # 全体サマリー行の更新
+        # サマリー情報更新（全データ点から真の最高値・最低値を算出）
         # ----------------------------------------------------------------------
         summary_row.controls.clear()
-        if show_bal and line_bal_points:
-            vals = [p["y"] for p in line_bal_points]
+        if show_bal and full_bal_points:
+            vals = [p["y"] for p in full_bal_points]
             summary_row.controls.extend([
-                ft.Text(f"¥{min(vals):,.0f}~", color=ft.Colors.GREY_400, size=12),
-                ft.Text(f"¥{vals[-1]:,.0f}", color=ft.Colors.CYAN, weight=ft.FontWeight.BOLD, size=12),
-                ft.Text(f"~¥{max(vals):,.0f}", color=ft.Colors.GREY_400, size=12),
+                ft.Text(f"Balance: ¥{vals[-1]:,.0f}", color=ft.Colors.CYAN, weight=ft.FontWeight.BOLD, size=11),
+                ft.Text(f"Max: ¥{max(vals):,.0f}", color=ft.Colors.GREY_400, size=11),
+                ft.Text(f"Min: ¥{min(vals):,.0f}", color=ft.Colors.GREY_400, size=11),
             ])
 
         if e:
