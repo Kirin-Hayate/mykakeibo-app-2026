@@ -212,9 +212,9 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         if show_bal and line_bal_points:
             vals = [p["y"] for p in line_bal_points]
             summary_row.controls.extend([
-                ft.Text(f"Balance: ¥{vals[-1]:,.0f}", color=ft.Colors.CYAN, weight=ft.FontWeight.BOLD, size=11),
-                ft.Text(f"Max: ¥{max(vals):,.0f}", color=ft.Colors.GREY_400, size=11),
-                ft.Text(f"Min: ¥{min(vals):,.0f}", color=ft.Colors.GREY_400, size=11),
+                ft.Text(f"¥{min(vals):,.0f}~", color=ft.Colors.GREY_400, size=12),
+                ft.Text(f"¥{vals[-1]:,.0f}", color=ft.Colors.CYAN, weight=ft.FontWeight.BOLD, size=12),
+                ft.Text(f"~¥{max(vals):,.0f}", color=ft.Colors.GREY_400, size=12),
             ])
 
         if e:
