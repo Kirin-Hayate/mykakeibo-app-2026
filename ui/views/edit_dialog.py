@@ -5,22 +5,14 @@ ui/views/edit_dialog.py
 明細一覧（Analysis画面）の各行にある「EDIT」ボタンが押された際に立ち上がる、
 明細の「修正保存」「新規複製保存」「削除」を行うモーダルダイアログモジュールです。
 
-【旧コードからの改善点・動作原理】
-1. 肥大化した main.py からの分離と疎結合化:
-   旧コードでは make_analysispage() の内部関数として深くネストしていた open_edit_dialog() を独立化しました。
-   更新・複製・削除の実行後は、引数として受け取った非同期コールバック（on_data_mutated）を呼び出し、
-   親画面へ一覧の再描画を依頼します。
-2. DatePickerおよびダイアログのライフサイクル管理:
-   page.overlay に追加した DatePicker や AlertDialog が画面に残り続けるゾンビ化バグを防ぐため、
-   保存・削除・キャンセルのいずれのアクションでも overlay から確実に削除・クリーンアップします。
-3. sheets_service との連携:
-   非同期で sheets_service.update_or_delete_record() や sheets_service.add_record() を実行し、
-   キャッシュの破棄・整合性を担保します。
+【修正内容】
+- DatePickerの返却値（UTCの15:00）を確実に JST（UTC+9）に変換して日付を確定させ、
+  カレンダーで選んだ日付（10/8）がそのまま 10/8 として表示・保存されるよう修正。
 """
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Any, Callable, Coroutine
 import flet as ft
 
@@ -37,16 +29,7 @@ async def open_edit_dialog(
 ) -> None:
     """
     指定された1件の明細データを編集・削除・複製するためのダイアログを表示する。
-
-    引数:
-        page: 現在のFletページオブジェクト
-        state: セッション個別のアプリケーション状態
-        row_data: 編集対象のレコード [日付, モード, 金額, カテゴリ, メモ, 登録日時, UUID]
-        on_data_mutated: データ更新・削除・複製完了後に一覧を再読込するための非同期コールバック
     """
-    # --------------------------------------------------------------------------
-    # 1. 編集用の一時状態の初期化
-    # --------------------------------------------------------------------------
     current_edit_date = str(row_data[0])
     current_edit_mode = str(row_data[1])
     current_edit_category = str(row_data[3])
@@ -54,18 +37,12 @@ async def open_edit_dialog(
     memo_val = str(row_data[4]) if len(row_data) > 4 else ""
     target_uuid = str(row_data[6]) if len(row_data) > 6 else ""
 
-    # 全カテゴリ（重複排除・ソート）
     all_categories = sorted(list(set(state.expense_categories + state.income_categories)))
 
-    # --------------------------------------------------------------------------
-    # 2. UI部品の作成（モード切替チップ、カテゴリ選択チップ、入力欄）
-    # --------------------------------------------------------------------------
     category_row = ft.Row(wrap=False, scroll=ft.ScrollMode.ADAPTIVE, spacing=5)
 
     def render_category_chips():
-        """現在のモードと選択カテゴリに合わせてチップ列を描画"""
         category_row.controls.clear()
-        # モードに対応するカテゴリを優先（なければ全体）
         target_list = state.expense_categories if current_edit_mode == "Expense" else state.income_categories
         if not target_list:
             target_list = all_categories
@@ -88,7 +65,6 @@ async def open_edit_dialog(
         page.update()
 
     def update_mode(mode_name: str):
-        """Expense / Income のモード切替"""
         nonlocal current_edit_mode
         current_edit_mode = mode_name
         mode_choice_expense.selected = (mode_name == "Expense")
@@ -113,17 +89,33 @@ async def open_edit_dialog(
 
     render_category_chips()
 
-    # 日付ピッカーの設定
     try:
         initial_date = datetime.strptime(current_edit_date, "%Y-%m-%d")
     except (ValueError, TypeError):
         initial_date = datetime.now(JST)
 
-    async def on_edit_date_change(e: ft.ControlEvent):
+    date_display_text = ft.Text(
+        f"日付: {current_edit_date}",
+        size=14,
+        weight=ft.FontWeight.W_500
+    )
+
+    def on_edit_date_change(e: ft.ControlEvent):
         nonlocal current_edit_date
-        if e.control.value:
-            current_edit_date = e.control.value.strftime("%Y-%m-%d")
-            edit_date_button.text = f"日付: {current_edit_date}"
+        picked_val = e.control.value
+        if picked_val is not None:
+            if isinstance(picked_val, datetime):
+                # Fletから届くUTC時刻（前日15:00等）をJST（+9時間）に正しく変換
+                if picked_val.tzinfo is None:
+                    jst_dt = picked_val.replace(tzinfo=timezone.utc).astimezone(JST)
+                else:
+                    jst_dt = picked_val.astimezone(JST)
+                current_edit_date = f"{jst_dt.year:04d}-{jst_dt.month:02d}-{jst_dt.day:02d}"
+            else:
+                current_edit_date = str(picked_val)[:10]
+
+            date_display_text.value = f"日付: {current_edit_date}"
+            date_display_text.update()
             page.update()
 
     edit_date_picker = ft.DatePicker(
@@ -138,24 +130,30 @@ async def open_edit_dialog(
         edit_date_picker.open = True
         page.update()
 
-    edit_date_button = ft.Button(
-        f"日付: {current_edit_date}",
-        icon=ft.Icons.CALENDAR_MONTH,
-        on_click=open_edit_date_picker
+    edit_date_button = ft.Container(
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.CALENDAR_MONTH, size=18, color=ft.Colors.CYAN_200),
+                date_display_text,
+            ],
+            spacing=8,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        padding=ft.Padding.symmetric(vertical=10, horizontal=14),
+        border=ft.Border.all(1, ft.Colors.GREY_700),
+        border_radius=8,
+        bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.GREY),
+        on_click=open_edit_date_picker,
+        ink=True,
     )
 
     edit_amount = ft.TextField(label="金額", value=str(int(raw_amount) if raw_amount.is_integer() else raw_amount))
     edit_content = ft.TextField(label="メモ", multiline=True, value=memo_val)
 
-    # 進行中ステータス表示
     status_left = ft.Text("", weight=ft.FontWeight.BOLD, size=12)
     status_right = ft.Text("", weight=ft.FontWeight.BOLD, size=12)
 
-    # --------------------------------------------------------------------------
-    # 3. 各アクションハンドラ（保存 / 削除 / 複製 / 閉じる）
-    # --------------------------------------------------------------------------
     async def cleanup_overlay():
-        """ダイアログとDatePickerを overlay から完全消去"""
         dialog.open = False
         page.update()
         await asyncio.sleep(0.1)
@@ -166,7 +164,6 @@ async def open_edit_dialog(
         page.update()
 
     async def on_save(e: ft.ControlEvent):
-        """変更内容で上書き保存（UPDATE）"""
         try:
             amt_val = float(edit_amount.value.strip())
         except ValueError:
@@ -177,7 +174,6 @@ async def open_edit_dialog(
         status_right.color = "orange"
         page.update()
 
-        # レコード更新: UUIDと元タイムスタンプは維持
         updated_record = [
             current_edit_date,
             current_edit_mode,
@@ -198,7 +194,6 @@ async def open_edit_dialog(
         await on_data_mutated()
 
     async def on_delete(e: ft.ControlEvent):
-        """該当レコードを行削除（DELETE）"""
         status_left.value = "削除中..."
         status_left.color = "orange"
         page.update()
@@ -213,7 +208,6 @@ async def open_edit_dialog(
         await on_data_mutated()
 
     async def on_duplicate(e: ft.ControlEvent):
-        """現在の入力内容をもとに新しいUUIDを付与して新規複製保存（INSERT）"""
         try:
             amt_val = float(edit_amount.value.strip())
         except ValueError:
@@ -240,9 +234,6 @@ async def open_edit_dialog(
     async def close_dialog(e: ft.ControlEvent):
         await cleanup_overlay()
 
-    # --------------------------------------------------------------------------
-    # 4. ダイアログの構築と表示
-    # --------------------------------------------------------------------------
     dialog = ft.AlertDialog(
         modal=True,
         title=ft.Row(
