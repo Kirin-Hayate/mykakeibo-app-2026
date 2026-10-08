@@ -61,4 +61,4 @@ SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8501"))
 
 # アイコンファイルのパス
-ICON_PATH = BASE_DIR / "Icon_2026-03-09-000233.ico"
+ICON_PATH = BASE_DIR / "icon_MyKAKEIBO_ver202610081158.ico"

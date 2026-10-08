@@ -88,19 +88,31 @@ async def main(page: ft.Page):
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
+    # アイコン画像のコントロールを作成（ファイルが存在する場合は画像、なければフォールバック）
+    if ICON_PATH.exists():
+        app_logo = ft.Image(
+            src=ICON_PATH.name,         # assets_dir="." を指定しているためファイル名で直接参照可能
+            width=100,
+            height=100,
+            fit=ft.BoxFit.CONTAIN,      # アスペクト比を維持
+            border_radius=ft.BorderRadius.all(16),  # 必要に応じて角丸
+        )
+    else:
+        app_logo = ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE) 
+
     page.add(
         ft.Column(
             controls=[
-                ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                ft.Icon(ft.Icons.SAVINGS, size=100, color=ft.Colors.WHITE),
-                ft.Text(f"connecting to {SPREADSHEET_NAME}", size=10, weight=ft.FontWeight.W_200, color=ft.Colors.WHITE),
-                create_loading_indicator("初期データ取得中..."),
+                ft.Text("My家計簿", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE), 
+                app_logo,  # ← ここを差し替え
+                ft.Text(f"connecting to {SPREADSHEET_NAME}", size=10, weight=ft.FontWeight.W_200, color=ft.Colors.WHITE), 
+                create_loading_indicator("初期データ取得中..."), 
             ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER, 
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, 
         )
     )
-    page.update()
+    page.update() 
 
     # --------------------------------------------------------------------------
     # 3. 初期データの非同期並行読み込み（カテゴリ & 明細）
@@ -186,8 +198,12 @@ if __name__ == "__main__":
             main,
             host=SERVER_HOST,
             port=SERVER_PORT,
-            view=ft.AppView.WEB_BROWSER
+            view=ft.AppView.WEB_BROWSER,
+            assets_dir="."  # プロジェクト直下を参照可能にする
         )
     else:
         print("[MyKAKEIBO] ローカルPCモード起動 (デスクトップUI)")
-        ft.run(main)
+        ft.run(
+            main,
+            assets_dir="."  # プロジェクト直下の .ico を認識させる
+        )
