@@ -144,7 +144,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
         chart.bottom_axis.labels = chart_labels
 
         # ----------------------------------------------------------------------
-        # 系列データ構築（単一折れ線によるシンプルで堅牢な構成）
+        # 系列データ構築（Bal系列を最優先登録してツールチップ打ち消しを回避）
         # ----------------------------------------------------------------------
         series_list = []
 
@@ -153,7 +153,27 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
             color=ft.Colors.TRANSPARENT,
         )
 
-        # 1. 収入の柱（color透明＋太さ0で縦線を不可視化）
+        # 【超重要】1. 収支（Balance）折れ線を「一番最初（インデックス0）」に追加
+        # 先頭に置くことで、Flutter側のツールチップ評価エンジンが最優先でこのテキストを採用する
+        if show_bal and line_bal_points:
+            bal_data_points = [
+                fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
+                for p in line_bal_points
+            ]
+            series_list.append(
+                fch.LineChartData(
+                    bal_data_points,
+                    color=ft.Colors.CYAN_ACCENT_400,
+                    stroke_width=2.5 if current_width < 500 else 3.0,
+                    point=invisible_point,
+                    selected_point=fch.ChartCirclePoint(
+                        radius=4.0,
+                        color=ft.Colors.CYAN_ACCENT_100,
+                    ),
+                )
+            )
+
+        # 2. 収入の柱（Balの後に配置してツールチップを汚染させない）
         if show_inc:
             for item in bar_inc_series:
                 pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=None) for p in item["points"]]
@@ -169,7 +189,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
                     )
                 )
 
-        # 2. 支出の柱（color透明＋太さ0で縦線を不可視化）
+        # 3. 支出の柱（Balの後に配置してツールチップを汚染させない）
         if show_exp:
             for item in bar_exp_series:
                 pts = [fch.LineChartDataPoint(p["x"], p["y"], tooltip=None) for p in item["points"]]
@@ -185,27 +205,7 @@ def open_timeline_dialog(page: ft.Page, filtered_data_rows: List[List[Any]]) -> 
                     )
                 )
 
-        # 3. 収支（Balance）折れ線（全点通過・有効点のみ小さな選択点と要約カードを表示）
-        if show_bal and line_bal_points:
-            bal_data_points = [
-                fch.LineChartDataPoint(p["x"], p["y"], tooltip=p["tooltip"])
-                for p in line_bal_points
-            ]
-            series_list.append(
-                fch.LineChartData(
-                    bal_data_points,
-                    color=ft.Colors.CYAN_ACCENT_400,
-                    stroke_width=2.5 if current_width < 500 else 3.0,
-                    point=invisible_point,
-                    selected_point=fch.ChartCirclePoint(
-                        radius=3.5,
-                        color=ft.Colors.CYAN_ACCENT_100,
-                    ),
-                )
-            )
-
         chart.data_series = series_list
-
         # ----------------------------------------------------------------------
         # 全体サマリー行の更新（全点から真の最高値・最低値を表示）
         # ----------------------------------------------------------------------
