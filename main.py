@@ -26,7 +26,26 @@ os._exit(0) で安全にプロセスを解放してターミナルへ戻しま�
 import os
 import sys
 import asyncio
+import socket
 import flet as ft
+
+# ------------------------------------------------------------------------------
+# Windows特有の Proactor パイプ切断例外 (WinError 10054) 対策
+# ------------------------------------------------------------------------------
+if sys.platform == "win32":
+    from asyncio.proactor_events import _ProactorBasePipeTransport
+
+    _orig_call_connection_lost = _ProactorBasePipeTransport._call_connection_lost
+
+    def _safe_call_connection_lost(self, exc=None):
+        try:
+            _orig_call_connection_lost(self, exc)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            # ダイアログ展開中の強制切断時、コンソールをフリーズさせずに即終了
+            if os.getenv("APP_ENV", "local").lower() != "server":
+                os._exit(0)
+
+    _ProactorBasePipeTransport._call_connection_lost = _safe_call_connection_lost
 
 from config.settings import (
     SPREADSHEET_NAME,
@@ -42,26 +61,14 @@ from services.sheets_service import sheets_service
 
 
 async def main(page: ft.Page):
+    # ウィンドウの閉鎖はOS標準に委ねる（どの画面でも×ボタンが即座に反応）
+    page.window.prevent_close = False
+
+    # 切断イベント発生時もプロセスを即時解放
+    page.on_disconnect = lambda _: os._exit(0) if os.getenv("APP_ENV", "local").lower() != "server" else None
+
     # セッション個別のステートをインスタンス化
     state = AppState()
-
-    # --------------------------------------------------------------------------
-    # 0. ウィンドウ終了ハンドラ（Windows環境のConnectionResetError対策）
-    # --------------------------------------------------------------------------
-    def handle_window_event(e: ft.WindowEvent):
-        if e.type in ("close", "destroy"):
-            state.cancel_tasks()
-            if os.getenv("APP_ENV", "local").lower() != "server":
-                os._exit(0)
-
-    def handle_disconnect(e):
-        state.cancel_tasks()
-        if os.getenv("APP_ENV", "local").lower() != "server":
-            os._exit(0)
-
-    page.window.prevent_close = False
-    page.window.on_event = handle_window_event
-    page.on_disconnect = handle_disconnect
 
     # --------------------------------------------------------------------------
     # 1. ページ初期設定（テーマ、ウィンドウサイズ、アイコン）
