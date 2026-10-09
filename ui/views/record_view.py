@@ -48,12 +48,25 @@ def build_record_view(page: ft.Page, state: AppState) -> List[ft.Control]:
     date_label = ft.Text(f"date: {selected_date_str}", color="white", weight=ft.FontWeight.BOLD, size=20)
 
     async def handle_date_change(e: ft.ControlEvent):
-        """DatePickerで日付が選ばれたときのイベントハンドラ"""
+        """DatePickerで日付が選ばれたときのイベントハンドラ（JST変換による1日ズレ防止）"""
         nonlocal selected_date_str
-        if e.control.value:
-            # FletのDatePickerから取得したdatetimeを文字列に整形
-            val = e.control.value
-            selected_date_str = val.strftime("%Y-%m-%d")
+        val = e.control.value
+        if val:
+            if isinstance(val, str):
+                # ISOフォーマット文字列で渡ってきた場合
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            else:
+                dt = val
+
+            # タイムゾーンが未設定（naive）またはUTCの場合はJSTに揃える
+            if dt.tzinfo is None:
+                # Flutterから0:00として届いたnaive datetimeをJST化
+                dt = dt.replace(tzinfo=JST)
+            else:
+                # UTC等のタイムゾーンがついている場合はJSTへ変換
+                dt = dt.astimezone(JST)
+
+            selected_date_str = dt.strftime("%Y-%m-%d")
             date_label.value = f"date: {selected_date_str}"
             page.update()
 
