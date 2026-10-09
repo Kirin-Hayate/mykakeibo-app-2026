@@ -98,10 +98,10 @@ SERVER_PORT=8501
 ```bash
 python main.py
 ```
-※ Windows 環境では、コンソールを出さずに起動できる `pythonw.exe` 経由のショートカット作成を推奨します。
+※ Windows 環境では、コンソールを出さずに起動できる `pythonw.exe` 経由のショートカット作成を推奨。
 
 ### サーバーモード（常駐 Web サーバー）
-`.env` の `APP_ENV=server` を指定して起動します。同一 LAN 内のスマートフォンや PC のブラウザから `http://<サーバーのIP>:8501` でアクセス可能です。
+`.env` の `APP_ENV=server` を指定して起動します。同一 LAN 内のスマートフォンや PC のブラウザから `http://<サーバーのIP>:8501` でアクセス可能。
 ```bash
 python main.py
 ```
